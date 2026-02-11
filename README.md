@@ -12,13 +12,14 @@ The instructions are organized by infrastructure domain to facilitate modular ex
 
 ```plaintext
 patch-review-board-instructions/
-├── 🐧 os/                # Operating System (Linux) patch guidelines
+├── 🐧 os/                # Linux: RHEL (8/9/10), Ubuntu LTS (22.04/24.04), Oracle Linux (8/9/10)
+│   ├── README.md         # Domain overview & analysis
 │   └── PRB_Instruction-Linux.md
-├── 🗄️ database/          # Database patch guidelines (Placeholder)
-├── 🌐 network/           # Network equipment patch guidelines (Placeholder)
-├── 💾 storage/           # Storage system patch guidelines (Placeholder)
-├── ☁️ virtualization/    # Virtualization platform guidelines (Placeholder)
-└── 🔗 middleware/        # Middleware patch guidelines (Placeholder)
+├── 🗄️ database/          # Database: MySQL, PostgreSQL, Oracle DB (Planned)
+├── 🌐 network/           # Network: Cisco IOS, Juniper Junos, Arista EOS (Planned)
+├── 💾 storage/           # Storage: Dell EMC, NetApp, Pure Storage (Planned)
+├── ☁️ virtualization/    # Virtualization: VMware vSphere, KVM, OpenStack (Planned)
+└── 🔗 middleware/        # Middleware: Apache, Nginx, Tomcat, JBoss (Planned)
 ```
 
 ---
