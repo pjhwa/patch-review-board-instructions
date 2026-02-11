@@ -6,21 +6,34 @@ This repository hosts the canonical job instructions for **AI Agents** serving a
 
 ---
 
-## 📂 Repository Structure
+## 📂 Repository Structure & Target Products
 
-The instructions are organized by infrastructure domain to facilitate modular expansion and specialized agent assignments.
+The instructions are organized by infrastructure domain. Each directory contains detailed guidelines for the specific technology stack.
 
-```plaintext
-patch-review-board-instructions/
-├── 🐧 os/                # Linux: RHEL (8/9/10), Ubuntu LTS (22.04/24.04), Oracle Linux (8/9/10)
-│   ├── README.md         # Domain overview & analysis
-│   └── PRB_Instruction-Linux.md
-├── 🗄️ database/          # Database: MySQL, PostgreSQL, Oracle DB (Planned)
-├── 🌐 network/           # Network: Cisco IOS, Juniper Junos, Arista EOS (Planned)
-├── 💾 storage/           # Storage: Dell EMC, NetApp, Pure Storage (Planned)
-├── ☁️ virtualization/    # Virtualization: VMware vSphere, KVM, OpenStack (Planned)
-└── 🔗 middleware/        # Middleware: Apache, Nginx, Tomcat, JBoss (Planned)
-```
+### 🐧 [os/](os/README.md) (Operating Systems)
+> **Representative Products**: RHEL, Ubuntu, Windows Server, Oracle Linux, Unix (AIX, HP-UX, Solaris)
+- Detailed Analysis: [`os/README.md`](os/README.md)
+- Instructions: [`PRB_Instruction-Linux.md`](os/PRB_Instruction-Linux.md)
+
+### 🗄️ [database/](database/README.md) (Databases)
+> **Representative Products**: Oracle Database, Microsoft SQL Server, MySQL, PostgreSQL
+- Detailed Analysis: [`database/README.md`](database/README.md)
+
+### 🌐 [network/](network/README.md) (Network)
+> **Representative Products**: Cisco (Catalyst, Nexus, ASR), F5 BIG-IP, Fortinet Fortigate
+- Detailed Analysis: [`network/README.md`](network/README.md)
+
+### 💾 [storage/](storage/README.md) (Storage)
+> **Representative Products**: Dell EMC (PowerStore, VMAX), Hitachi VSP, NetApp AFF/FAS
+- Detailed Analysis: [`storage/README.md`](storage/README.md)
+
+### 🔗 [middleware/](middleware/README.md) (Middleware)
+> **Representative Products**: Apache Tomcat, Oracle WebLogic, JBoss EAP, Nginx
+- Detailed Analysis: [`middleware/README.md`](middleware/README.md)
+
+### ☁️ [virtualization/](virtualization/README.md) (Virtualization)
+> **Representative Products**: VMware vSphere, Citrix Hypervisor, VMware NSX
+- Detailed Analysis: [`virtualization/README.md`](virtualization/README.md)
 
 ---
 
@@ -32,16 +45,9 @@ patch-review-board-instructions/
 - **Cadence**: Quarterly (End of Mar, Jun, Sep, Dec)
 - **Scope**: Patches released within the last **3 months**.
 
-### Targeted Platforms (OS)
-| Platform | Versions |
-| :--- | :--- |
-| **Red Hat Enterprise Linux** | 8, 9, 10 |
-| **Ubuntu LTS** | 22.04, 24.04 |
-| **Oracle Linux** | 8, 9, 10 |
-
 ---
 
-## 🎯 Selection Criteria & Scope
+## 🎯 Selection Criteria (Global Standard)
 
 The AI Agent evaluates patches based on the following strict criteria to filter noise and focus on impact.
 
@@ -53,31 +59,6 @@ Patches are selected if they address one or more of the following:
 4.  **Hardware Control** ⚙️: Fixes for controller or hardware malfunctions.
 5.  **Failover Assurance** 🔄: Fixes preventing HA (High Availability) failover.
 6.  **Widespread Impact** 🌍: Bugs affecting a large percentage of deployments.
-
-### 📦 Target Package Scope
-Verification is **not limited to the Kernel**. The full stack is considered:
-- **Foundations**: Kernel, Firmware, Device Drivers (Storage, Network, GPU)
-- **Core Services**: systemd, udev, journald, dbus
-- **Network Stack**: NetworkManager, firewalld, iptables, iproute
-- **Filesystem**: lvm2, xfsprogs, multipath-tools, nfs-utils
-- **Security & Libs**: glibc, openssl, selinux-policy, sudo
-
----
-
-## 🚀 Usage
-
-These instructions are designed to be ingested by LLM-powered agents (e.g., via RAG or context loading).
-
-**Example Prompt for AI Agent:**
-> "Act as the Infrastructure Stability AI Agent. Read the `os/PRB_Instruction-Linux.md` file. Perform the quarterly patch research for the period [Start Date] to [End Date] following the criteria and output the results in the specified CSV format."
-
----
-
-## 📝 Output Format
-
-Results are generated in a standardized CSV format for automated processing and human review:
-- **Columns**: `Category`, `Release Date`, `Vendor`, `Model/Version`, `Detailed Version`, `Patch Name`, `Patch Target`, `Reference Site`, `Patch Description` (EN), `Korean Description` (KR).
-- **Localization**: Includes concise, professional Korean summaries (noun-ending style) for rapid decision-making by Korean operators.
 
 ---
 *Maintained by Infrastructure Operation Team*

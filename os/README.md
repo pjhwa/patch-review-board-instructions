@@ -1,15 +1,35 @@
-# 🐧 Operating System (Linux) Patch Guidelines
+# 🐧 Operating System Patch Guidelines
 
 > **Domain**: Infrastructure / Operating Systems
-> **Scope**: Red Hat Enterprise Linux, Ubuntu LTS, Oracle Linux
+> **Scope**: Windows, Linux, Unix
 
-This directory contains the specific job instructions for AI Agents to perform quarterly patch analysis for Linux-based operating systems.
+This directory contains the job instructions for AI Agents to perform quarterly patch analysis for operating systems.
+
+## 📋 Target Products Scope
+
+The following operating systems are within the scope of the Patch Review Board:
+
+### Linux
+- **Red Hat Enterprise Linux (RHEL)** (8, 9, 10)
+- **Ubuntu LTS** (22.04, 24.04)
+- **Oracle Linux** (8, 9, 10)
+
+### Windows
+- **Microsoft Windows Server** (2019, 2022, 2025)
+
+### Unix
+- **HP-UX**
+- **IBM AIX**
+- **Oracle Solaris**
+
+---
 
 ## 📄 Available Instructions
 
 | File | Description | Target Agent |
 | :--- | :--- | :--- |
 | [`PRB_Instruction-Linux.md`](PRB_Instruction-Linux.md) | Comprehensive guide for RHEL, Ubuntu, and Oracle Linux patch recommendation. | OpenClaw / AI Agent |
+| *TBD* | *Instructions for Windows, HP-UX, AIX, Solaris are under development.* | - |
 
 ---
 
@@ -52,7 +72,3 @@ The AI Agent is trained to filter thousands of patches down to a vital few based
     - Aggregates descriptions to include all intermediate fixes.
 5.  **Localization**: Translates technical descriptions into professional Korean summaries.
 6.  **Report Generation**: Outputs a CSV ready for the Patch Review Board's decision.
-
----
-
-*For updates or contributions to these guidelines, please submit a Pull Request to the `master` branch.*
