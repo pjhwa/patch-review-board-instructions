@@ -9,6 +9,7 @@
 
 ## 3. 작업 수행 기간 (Target Period)
 - **검토 대상 기간**: 작업 시점 기준 과거 3개월 (분기별)
+    - **Reality Check (필수 확인)**: 만약 지침상의 기간이 현재 날짜(Current Date)보다 미래일 경우, **실제 데이터가 존재하는 가장 최신 3개월(The most recent 3 months of available real-world data)**을 대상으로 작업을 수행한다. (Time Paradox 방지)
 - **대상 제품**: Red Hat Enterprise Linux (RHEL), Ubuntu LTS, Oracle Linux
 
 ## 4. 패치 권고 기준 및 대상 (Selection Criteria & Target Scope)
@@ -34,8 +35,15 @@
 
 ## 5. 분야별 상세 검토 방법 (Detailed Execution Steps)
 
+> **Strategic Execution (전략적 실행)**
+> 한 번의 프롬프트로 모든 OS를 조사하려고 시도하지 마시오. 복잡도를 낮추고 정확도를 높이기 위해 **OS별로 작업을 나누어 순차적으로 진행**하는 것을 강력히 권장한다.
+> 1. RHEL 조사 및 결과 출력
+> 2. Ubuntu 조사 및 결과 출력
+> 3. Oracle Linux 조사 및 결과 출력
+
 ### 5.1. Red Hat Enterprise Linux (RHEL)
 1. **정보 수집**: [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지 활용
+    - **Search Strategy**: 특정 날짜 검색(예: "Jan 2026")이 실패할 경우, 검색 범위를 넓혀 버전과 월(예: "Red Hat Enterprise Linux 9 errata")로 검색한 후 수동으로 날짜를 필터링한다.
 2. **검색 필터 설정**:
     - **Product**: "Red Hat Enterprise Linux"
     - **Variant**: 다음 4가지 Variant에 대해 각각 검색
