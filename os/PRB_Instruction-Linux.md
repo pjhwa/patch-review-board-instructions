@@ -14,11 +14,12 @@
 ## 3. 작업 수행 기간 (Target Period)
 - **검토 대상 기간**: 작업 시점 기준 과거 3개월 (분기별)
     - **🚨 REALITY CHECK & TIME PARADOX PROTOCOL (MANDATORY)**
-        - **Logic**: IF (Target_End_Date > Current_Real_Date) THEN:
-            - **STOP** searching for future dates immediately.
-            - **FORCE** Target Period = [Current_Real_Date - 3 Months] TO [Current_Real_Date].
-            - **SEARCH** for this new real-world period.
-        - **Prohibition**: Do not attempt to simulate, extrapolate, or invent data for the future. "2026년 데이터가 없다"는 이유로 가상의 2026년 데이터를 만들지 마십시오. 대신 실제 존재하는 최신 데이터(2024년 등)를 수집하십시오.
+        - **Logic**: IF (Target_Start_Date > Current_Real_Date) THEN:
+            1. **STOP** all search operations immediately.
+            2. **DO NOT** attempt to find "similar" or "past" data (e.g., do NOT fallback to 2024 or any other past year).
+            3. **REPORT** final output as: "No Data Available: Target period (YYYY-MM) is in the future relative to current knowledge cutoff."
+        - **Prohibition**: Do not attempt to simulate, extrapolate, or invent data for the future.
+
 - **대상 제품**: Red Hat Enterprise Linux (RHEL), Ubuntu LTS, Oracle Linux
 
 ## 4. 패치 권고 기준 및 대상 (Selection Criteria & Target Scope)
@@ -52,7 +53,7 @@
 
 ### 5.1. Red Hat Enterprise Linux (RHEL)
 1. **정보 수집**: [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지 활용
-    - **Search Strategy**: 미래 날짜(예: "Jan 2026") 검색은 반드시 실패하므로 시도하지 마십시오. 대신 **"Latest available security advisories"**, **"RHEL 9 errata list"** 와 같이 포괄적인 검색어를 사용한 후, 결과에서 **가장 최신 날짜**의 항목을 추출하십시오.
+    - **Search Strategy**: 미래 날짜(예: "Jan 2026") 검색은 반드시 실패하므로 시도하지 마십시오. 만약 특정 날짜 쿼리가 결과를 반환하지 않으면, **임의로 과거 연도(예: 2024)를 검색하지 말고**, 즉시 "No Data Found"를 확인하고 종료하십시오.
 2. **검색 필터 설정**:
     - **Product**: "Red Hat Enterprise Linux"
     - **Variant**: 다음 4가지 Variant에 대해 각각 검색
