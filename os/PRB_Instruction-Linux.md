@@ -1,5 +1,9 @@
 # Patch Review Board Job Instruction: Quarterly Linux Patch Recomendation
 
+> **🚨 CRITICAL ZERO TOLERANCE POLICY (무관용 원칙) 🚨**
+> 1.  **NEVER generate fake data (가상 데이터 생성 절대 금지)**: 만약 검색 결과가 없다면 "No Data Found"라고 보고하시오. 지침의 출력 양식을 맞추기 위해 존재하지 않는 CVE ID, 패키지 버전, 날짜를 생성하는 것은 임무 실패보다 더 심각한 치명적인 오류입니다.
+> 2.  **Verify Real-World Existence**: 모든 패치 정보(버전, CVE, 날짜)는 반드시 제공된 참조 사이트(Vendor URL)에서 검증되어야 합니다.
+
 ## 1. 개요 (Overview)
 본 문서는 AI 에이전트가 분기별(3월말, 6월말, 9월말, 12월말)로 최근 3개월 동안 발표된 OS 패치들을 검토하고, 인프라 운영 안정성을 위해 적용이 필요한 패치를 선별하여 권고하는 작업을 수행하기 위한 지침이다.
 
@@ -9,7 +13,12 @@
 
 ## 3. 작업 수행 기간 (Target Period)
 - **검토 대상 기간**: 작업 시점 기준 과거 3개월 (분기별)
-    - **Reality Check (필수 확인)**: 만약 지침상의 기간이 현재 날짜(Current Date)보다 미래일 경우, **실제 데이터가 존재하는 가장 최신 3개월(The most recent 3 months of available real-world data)**을 대상으로 작업을 수행한다. (Time Paradox 방지)
+    - **🚨 REALITY CHECK & TIME PARADOX PROTOCOL (MANDATORY)**
+        - **Logic**: IF (Target_End_Date > Current_Real_Date) THEN:
+            - **STOP** searching for future dates immediately.
+            - **FORCE** Target Period = [Current_Real_Date - 3 Months] TO [Current_Real_Date].
+            - **SEARCH** for this new real-world period.
+        - **Prohibition**: Do not attempt to simulate, extrapolate, or invent data for the future. "2026년 데이터가 없다"는 이유로 가상의 2026년 데이터를 만들지 마십시오. 대신 실제 존재하는 최신 데이터(2024년 등)를 수집하십시오.
 - **대상 제품**: Red Hat Enterprise Linux (RHEL), Ubuntu LTS, Oracle Linux
 
 ## 4. 패치 권고 기준 및 대상 (Selection Criteria & Target Scope)
@@ -43,7 +52,7 @@
 
 ### 5.1. Red Hat Enterprise Linux (RHEL)
 1. **정보 수집**: [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지 활용
-    - **Search Strategy**: 특정 날짜 검색(예: "Jan 2026")이 실패할 경우, 검색 범위를 넓혀 버전과 월(예: "Red Hat Enterprise Linux 9 errata")로 검색한 후 수동으로 날짜를 필터링한다.
+    - **Search Strategy**: 미래 날짜(예: "Jan 2026") 검색은 반드시 실패하므로 시도하지 마십시오. 대신 **"Latest available security advisories"**, **"RHEL 9 errata list"** 와 같이 포괄적인 검색어를 사용한 후, 결과에서 **가장 최신 날짜**의 항목을 추출하십시오.
 2. **검색 필터 설정**:
     - **Product**: "Red Hat Enterprise Linux"
     - **Variant**: 다음 4가지 Variant에 대해 각각 검색
