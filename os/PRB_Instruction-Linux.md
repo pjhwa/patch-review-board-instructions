@@ -67,7 +67,17 @@
     - **Version**: "10, 9, 8"
     - **Architecture**: "x86_64"
     - **Advisory Type**: "Bug Fix", "Security Advisory"
-3. **중복 제거 (Deduplication)**: Product, Variant 별로 검색된 패치가 동일할 경우 하나만 선택한다.
+3. **상세 검색 방법 (Detailed Search Method)**:
+    1.  [Red Hat Errata Search](https://access.redhat.com/errata-search) 접속
+    2.  **Keyword**: 공란으로 두거나 "latest" 입력
+    3.  **Filter By**:
+        -   **Product**: `Red Hat Enterprise Linux` 선택
+        -   **Version**: `9` 또는 `8` 등 타겟 버전 선택
+        -   **Architecture**: `x86_64` 선택
+        -   **Type**: `Security Advisory` 와 `Bug Fix Advisory` 체크
+    4.  **Filter** 버튼 클릭
+    5.  결과를 **Date** (내림차순) 정렬하여 최신 항목부터 검토
+4. **중복 제거 (Deduplication)**: Product, Variant 별로 검색된 패치가 동일할 경우 하나만 선택한다.
 4. **기간 필터링 (Period Filtering)**: "Updated date" 기준 최근 3개월 이내 패치만 대상으로 한다.
 5. **심각도 선별 (Severity Filtering)**: Red Hat 분류 기준 "Critical", "Important" 패치만 선별한다.
 6. **최신성 유지 및 설명 통합 (Version Control & Description)**: 
@@ -84,7 +94,13 @@
     - **Releases**: 현재 지원되는 LTS 버전 (Ubuntu Pro 전용 제외)
         - 예: "24.04 LTS noble", "22.04 LTS jammy"
     - "Apply filters"를 적용한다.
-3. **기간 필터링 (Period Filtering)**: "Publication date" 기준 최근 3개월 이내 패치만 대상으로 한다.
+3. **상세 검색 방법 (Detailed Search Method)**:
+    1.  [Ubuntu Security Notices](https://ubuntu.com/security/notices) 접속
+    2.  **Filter** 설정:
+        -   **Select Release**: `Ubuntu 24.04 LTS` 또는 `22.04 LTS` 등 타겟 버전 선택
+        -   **Start/End Date**: 타겟 기간 설정 (예: `2025-11-01` ~ `2026-02-01`)
+    3.  **Apply filters** 버튼 클릭하여 결과 조회
+4. **기간 필터링 (Period Filtering)**: "Publication date" 기준 최근 3개월 이내 패치만 대상으로 한다.
 4. **내용 분석 및 선정 (Analysis & Selection)**:
     - "CVE ID" 및 상세 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정한다.
     - 동일 패키지(예: linux-image)의 경우, 분기 내 최신 패치만 선택하되 이전 패치들의 주요 수정 사항도 설명에 포함한다.
@@ -96,7 +112,14 @@
     - "Security Errata" 섹션 내에서 검색한다.
     - **버전**: Oracle Linux 10, 9, 8, 7, 6 Security Errata (주로 최신 버전을 권장한다)
     - **Advisory Type**: Bug, Security
-3. **기간 필터링 (Period Filtering)**: "Release Date" 기준 최근 3개월 이내 패치만 대상으로 한다 ("Updated date" 아님).
+3. **상세 검색 방법 (Detailed Search Method)**:
+    1.  [Oracle Linux Security](https://linux.oracle.com/security) 접속
+    2.  **Security Errata** 탭 선택
+    3.  **검색 방식**:
+        -   브라우저 찾기 기능(`Ctrl+F`)을 사용하여 `ELSA-[Year]` 형식으로 검색
+        -   또는 **Release Date** 컬럼을 확인하여 해당 월의 패치 식별
+    4.  `Oracle Linux 9` 또는 `8`에 해당하는 Advisory 식별
+4. **기간 필터링 (Period Filtering)**: "Release Date" 기준 최근 3개월 이내 패치만 대상으로 한다 ("Updated date" 아님).
 4. **내용 분석 및 선정 (Analysis & Selection)**:
     - Advisory (예: `ELSA-2026-####`) 상세 페이지의 "Description"을 분석한다.
     - "Updated Packages" 목록을 확인한다 (Architecture: `x86_64`).
