@@ -69,9 +69,9 @@
 > **🚨 BROWSER TOOL FAILURE CONTINGENCY (비상 프로토콜)**
 > 만약 `browser_subagent` 또는 `read_browser_page` 도구가 시스템 오류로 인해 실패(Error/Timeout)할 경우에 한하여, 다음의 **제한적 웹 검색(Restricted Web Search)**을 허용합니다.
 > - **조건**: 반드시 `web_search`를 사용하되, `site:` 연산자로 도메인을 제한해야 함.
-> - **RHEL**: `site:access.redhat.com "RHEL 9" "Security Advisory" after:2025-11-01`
+> - **RHEL**: `site:access.redhat.com "RHEL 9" ("Security Advisory" OR "Bug Fix") after:2025-11-01`
 > - **Ubuntu**: `site:ubuntu.com/security/notices "22.04 LTS" "2025-11"` (미래 날짜 경고가 있어도 내용이 유효하면 수집)
-> - **Oracle**: `site:linux.oracle.com OR site:oracle.com "ELSA-2025" "Oracle Linux 9"`
+> - **Oracle**: `site:linux.oracle.com OR site:oracle.com ("ELSA-2025" OR "ELBA-2025") "Oracle Linux 9"`
 > - **검증**: 검색된 URL이 공식 벤더 도메인인지 반드시 확인 후 데이터를 추출하시오.
 
 ### 5.1. Red Hat Enterprise Linux (RHEL)
@@ -106,7 +106,8 @@
     - 단, 설명(`Patch Description`, `한글 설명`)에는 해당 분기 내에 포함된 이전 버전 패치들의 주요 변경/개선 내용도 함께 요약하여 포함해야 한다.
 7. **내용 분석 및 선정 (Analysis & Selection)**:
     - Advisory 세부 페이지의 "Description" 섹션을 분석한다.
-    - "Bug Fix(es) and Enhancement(s):" 또는 "Security Fix(es):" 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정한다.
+    - "Bug Fix(es) and Enhancement(s):" (버그 수정) 또는 "Security Fix(es):" (보안 수정) 내용을 모두 검토한다.
+    - **중요**: 보안 취약점뿐만 아니라, **[4.1. 권고 기준]의 시스템 안정성(Hang, Crash, Data Loss)**에 해당하는 버그 수정이 포함된 경우 반드시 선정해야 한다.
 8. **검토 대상 확인 (Target Checking)**: [4.2. 검토 대상 패키지]에 정의된 모든 패키지를 대상으로 하며, 특히 커널 외에도 시스템 성능, 네트워크, 파일시스템, 보안 등 운영에 영향을 줄 수 있는 패치를 누락 없이 검토한다.
 
 ### 5.2. Ubuntu LTS
@@ -143,8 +144,9 @@
     4.  `Oracle Linux 9` 또는 `8`에 해당하는 Advisory 식별
 4. **기간 필터링 (Period Filtering)**: "Release Date" 기준 최근 3개월 이내 패치만 대상으로 한다 ("Updated date" 아님).
 4. **내용 분석 및 선정 (Analysis & Selection)**:
-    - Advisory (예: `ELSA-2026-####`) 상세 페이지의 "Description"을 분석한다.
+    - Advisory (예: `ELSA-2026-####` 또는 `ELBA-2026-####`) 상세 페이지의 "Description"을 분석한다.
     - "Updated Packages" 목록을 확인한다 (Architecture: `x86_64`).
+    - **중요**: ELSA(Security)뿐만 아니라 **ELBA(Bug Fix)**도 반드시 검토하여, 시스템 안정성(Hang/Crash) 관련 패치를 포함해야 한다.
     - 수정된 버그 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정한다.
 5. **최신성 유지 및 설명 통합 (Version Control & Description)**:
     - 동일 패키지의 경우 분기 내 최신 패치만 선택하되, 이전 패치들의 주요 수정 사항도 설명에 포함한다.
