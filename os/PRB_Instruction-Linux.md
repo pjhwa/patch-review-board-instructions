@@ -14,10 +14,11 @@
 ## 3. 작업 수행 기간 (Target Period)
 - **검토 대상 기간**: 작업 시점 기준 과거 3개월 (분기별)
     - **🚨 REALITY CHECK & TIME PARADOX PROTOCOL (MANDATORY)**
-        - **Logic**: IF (Target_Start_Date > Current_Real_Date) THEN:
+        - **Critical Definition**: "Current Date"는 프롬프트 컨텍스트에 주어진 **System Date**를 의미합니다 (예: 2026-02-13). 당신의 학습 데이터 기준일(Knowledge Cutoff)이 아닙니다. System Date가 2026년이라면 2025년은 "과거"입니다.
+        - **Logic**: IF (Target_Start_Date > System_Current_Date) THEN:
             1. **STOP** 모든 검색 작업을 즉시 중단하시오.
             2. **DO NOT** 유사 데이터나 과거 데이터(예: 2024년 데이터)를 찾으려고 시도하지 마시오.
-            3. **REPORT** 최종 결과를 다음과 같이 보고하시오: "No Data Available: Target period (YYYY-MM) is in the future relative to current knowledge cutoff."
+            3. **REPORT** 최종 결과를 다음과 같이 보고하시오: "No Data Available: Target period (YYYY-MM) is in the future relative to System Date (YYYY-MM-DD)."
         - **Prohibition**: 미래의 데이터를 시뮬레이션, 추론, 또는 생성하지 마시오.
 - **대상 제품**: Red Hat Enterprise Linux (RHEL), Ubuntu LTS, Oracle Linux
 
