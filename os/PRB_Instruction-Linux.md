@@ -69,7 +69,7 @@
 > **🚨 BROWSER TOOL FAILURE CONTINGENCY (비상 프로토콜)**
 > 만약 `browser_subagent` 또는 `read_browser_page` 도구가 시스템 오류로 인해 실패(Error/Timeout)할 경우에 한하여, 다음의 **제한적 웹 검색(Restricted Web Search)**을 허용합니다.
 > - **조건**: 반드시 `web_search`를 사용하되, `site:` 연산자로 도메인을 제한해야 함.
-> - **RHEL**: `site:access.redhat.com "RHEL 9" ("Security Advisory" OR "Bug Fix") after:2025-11-01`
+> - **RHEL**: `site:access.redhat.com "RHEL 9" ("Security Advisory" OR "Bug Fix") -OpenShift -OpenStack after:2025-11-01`
 > - **Ubuntu**: `site:ubuntu.com/security/notices "22.04 LTS" "2025-11"` (미래 날짜 경고가 있어도 내용이 유효하면 수집)
 > - **Oracle**: `site:linux.oracle.com OR site:oracle.com ("ELSA-2025" OR "ELBA-2025") "Oracle Linux 9"`
 > - **검증**: 검색된 URL이 공식 벤더 도메인인지 반드시 확인 후 데이터를 추출하시오.
@@ -159,7 +159,8 @@
 
 - **필드 작성 규칙**:
     - **Patch Name**:
-        - **RHEL**: 선택된 패키지 이름과 버전을 정확히 기입한다. (예: `kernel-4.18.0-553.82.1.el8_10`)
+        - **RHEL**: **반드시 RPM 패키지 이름 형식을 사용한다.** (예: `kernel-4.18.0-553.82.1.el8_10`, `openssl-3.0.7-55.el9_5`)
+            - **금지**: `RHSA-2025:xxxx`와 같은 Advisory ID를 Patch Name으로 사용하지 마시오. Advisory ID는 `Reference Site` URL에만 포함되어야 함.
         - **Ubuntu**: USN의 'Packages' 섹션에 명시된 패키지 이름과 버전을 포함하여 기입한다. (예: `linux-lowlatency-hwe-6.11-6.11.0-1004.4`)
         - **Oracle Linux**: 'Updated Packages' 목록 중 Architecture가 `x86_64`인 파일명에서 `.rpm` 확장자를 제외한 이름을 기입한다. (예: `kernel-uek-5.15.0-202.135.2.el9uek`)
     - **Patch Description**: 해당 패치의 영문 설명을 작성한다. 분기 내 누적된 변경 사항을 포함한다.
