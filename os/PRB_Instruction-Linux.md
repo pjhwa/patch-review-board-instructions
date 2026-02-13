@@ -55,8 +55,14 @@
 > 2. Ubuntu 조사 및 결과 출력
 > 3. Oracle Linux 조사 및 결과 출력
 
+> **⚠️ DYNAMIC PAGE HANDLING (필수 기술 지침)**
+> RHEL 및 Oracle Linux 등 일부 벤더 사이트는 **SPA(Single Page Application)** 또는 동적 검색 폼으로 구성되어 있습니다.
+> - **DO NOT USE `web_fetch` (HTTP GET)**: 단순 URL 조회 시 빈 페이지(Shell)만 반환되므로 "No Data"로 오판하게 됩니다.
+> - **MUST USE Browser Tools**: 반드시 `browser_subagent` 등 브라우저 제어 도구를 사용하여 **페이지 로딩 대기 -> 필터 입력 -> 검색 버튼 클릭** 과정을 수행해야 합니다.
+
 ### 5.1. Red Hat Enterprise Linux (RHEL)
 1. **정보 수집 (Information Gathering)**: 반드시 [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지를 사용하여 검색한다. (외부 검색 금지)
+    - **기술적 주의사항 (Technical Note)**: 이 페이지는 동적 폼입니다. `read_url`을 사용하지 말고, **브라우저 도구**를 사용하여 페이지에 접속한 후 폼이 로드될 때까지 기다려야 합니다.
     - **검색 전략 (Search Strategy)**: 미래 날짜(예: "Jan 2026") 검색은 반드시 실패하므로 시도하지 마십시오. 만약 특정 날짜 쿼리가 결과를 반환하지 않으면, **임의로 과거 연도(예: 2024)를 검색하지 말고**, 즉시 "No Data Found"를 확인하고 종료하십시오.
 2. **검색 필터 설정 (Filter Settings)**:
     - **Product**: "Red Hat Enterprise Linux"
@@ -109,6 +115,7 @@
 
 ### 5.3. Oracle Linux
 1. **정보 수집 (Information Gathering)**: 반드시 [Oracle Linux Security](https://linux.oracle.com/security) 페이지를 사용하여 검색한다. (외부 검색 금지)
+    - **기술적 주의사항 (Technical Note)**: 이 페이지는 데이터를 동적으로 로딩합니다. 브라우저 도구를 사용하여 접속 후 목록이 나타날 때까지 충분히 대기하십시오. `web_fetch` 결과가 비어있다고 해서 데이터가 없는 것이 아닙니다.
 2. **검색 설정 (Search Settings)**:
     - "Security Errata" 섹션 내에서 검색한다.
     - **버전**: Oracle Linux 10, 9, 8, 7, 6 Security Errata (주로 최신 버전을 권장한다)
