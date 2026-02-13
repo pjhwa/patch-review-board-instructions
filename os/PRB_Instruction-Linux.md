@@ -63,9 +63,9 @@
 > **🚨 BROWSER TOOL FAILURE CONTINGENCY (비상 프로토콜)**
 > 만약 `browser_subagent` 또는 `read_browser_page` 도구가 시스템 오류로 인해 실패(Error/Timeout)할 경우에 한하여, 다음의 **제한적 웹 검색(Restricted Web Search)**을 허용합니다.
 > - **조건**: 반드시 `web_search`를 사용하되, `site:` 연산자로 도메인을 제한해야 함.
-> - **RHEL**: `site:access.redhat.com/errata "RHEL 9" "Critical" after:2025-11-01`
-> - **Ubuntu**: `site:ubuntu.com/security/notices "22.04 LTS" "2025-11"`
-> - **Oracle**: `site:linux.oracle.com/security "ELSA-2025" "Oracle Linux 9"`
+> - **RHEL**: `site:access.redhat.com "RHEL 9" "Security Advisory" after:2025-11-01`
+> - **Ubuntu**: `site:ubuntu.com/security/notices "22.04 LTS" "2025-11"` (미래 날짜 경고가 있어도 내용이 유효하면 수집)
+> - **Oracle**: `site:linux.oracle.com OR site:oracle.com "ELSA-2025" "Oracle Linux 9"`
 > - **검증**: 검색된 URL이 공식 벤더 도메인인지 반드시 확인 후 데이터를 추출하시오.
 
 ### 5.1. Red Hat Enterprise Linux (RHEL)
