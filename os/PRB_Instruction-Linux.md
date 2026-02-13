@@ -57,9 +57,9 @@
 
 > **전략적 실행 (Strategic Execution)**
 > 한 번의 프롬프트로 모든 OS를 조사하려고 시도하지 마시오. 복잡도를 낮추고 정확도를 높이기 위해 **OS별로 작업을 나누어 순차적으로 진행**하는 것을 강력히 권장한다.
-> 1. RHEL 조사 및 결과 출력
-> 2. Ubuntu 조사 및 결과 출력
-> 3. Oracle Linux 조사 및 결과 출력
+> 1. RHEL 조사 및 결과 출력 (Target: 10, 9, 8)
+> 2. Ubuntu 조사 및 결과 출력 (Target: 24.04, 22.04 LTS)
+> 3. Oracle Linux 조사 및 결과 출력 (Target: 10, 9, 8, 7, 6)
 
 > **⚠️ DYNAMIC PAGE HANDLING (필수 기술 지침)**
 > RHEL 및 Oracle Linux 등 일부 벤더 사이트는 **SPA(Single Page Application)** 또는 동적 검색 폼으로 구성되어 있습니다.
@@ -69,9 +69,9 @@
 > **🚨 BROWSER TOOL FAILURE CONTINGENCY (비상 프로토콜)**
 > 만약 `browser_subagent` 또는 `read_browser_page` 도구가 시스템 오류로 인해 실패(Error/Timeout)할 경우에 한하여, 다음의 **제한적 웹 검색(Restricted Web Search)**을 허용합니다.
 > - **조건**: 반드시 `web_search`를 사용하되, `site:` 연산자로 도메인을 제한해야 함.
-> - **RHEL**: `site:access.redhat.com "RHEL 9" ("Security Advisory" OR "Bug Fix") -OpenShift -OpenStack after:2025-11-01`
-> - **Ubuntu**: `site:ubuntu.com/security/notices "22.04 LTS" "2025-11"` (미래 날짜 경고가 있어도 내용이 유효하면 수집)
-> - **Oracle**: `site:linux.oracle.com OR site:oracle.com ("ELSA-2025" OR "ELBA-2025") "Oracle Linux 9"`
+> - **RHEL**: `site:access.redhat.com "RHEL <8/9/10>" ("Security Advisory" OR "Bug Fix") -OpenShift -OpenStack after:2025-11-01` (각 버전별 개별 수행)
+> - **Ubuntu**: `site:ubuntu.com/security/notices "<22.04/24.04> LTS" "2025-11"` (각 LTS 버전별 개별 수행)
+> - **Oracle**: `site:linux.oracle.com OR site:oracle.com ("ELSA-2025" OR "ELBA-2025") "Oracle Linux <6/7/8/9/10>"` (각 버전별 개별 수행)
 > - **검증**: 검색된 URL이 공식 벤더 도메인인지 반드시 확인 후 데이터를 추출하시오.
 
 ### 5.1. Red Hat Enterprise Linux (RHEL)
@@ -133,7 +133,7 @@
     - **기술적 주의사항 (Technical Note)**: 이 페이지는 데이터를 동적으로 로딩합니다. 브라우저 도구를 사용하여 접속 후 목록이 나타날 때까지 충분히 대기하십시오. `web_fetch` 결과가 비어있다고 해서 데이터가 없는 것이 아닙니다.
 2. **검색 설정 (Search Settings)**:
     - "Security Errata" 섹션 내에서 검색한다.
-    - **버전**: Oracle Linux 10, 9, 8, 7, 6 Security Errata (주로 최신 버전을 권장한다)
+    - **버전**: Oracle Linux 10, 9, 8, 7, 6 Security Errata (모든 버전을 빠짐없이 확인한다)
     - **Advisory Type**: Bug, Security
 3. **상세 검색 방법 (Detailed Search Method)**:
     1.  [Oracle Linux Security](https://linux.oracle.com/security) 접속
