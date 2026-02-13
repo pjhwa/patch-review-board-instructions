@@ -1,4 +1,4 @@
-# Patch Review Board Job Instruction: Quarterly Linux Patch Recomendation
+# Patch Review Board 작업 지침: 분기별 Linux 패치 권고
 
 > **🚨 CRITICAL ZERO TOLERANCE POLICY (무관용 원칙) 🚨**
 > 1.  **NEVER generate fake data (가상 데이터 생성 절대 금지)**: 만약 검색 결과가 없다면 "No Data Found"라고 보고하시오. 지침의 출력 양식을 맞추기 위해 존재하지 않는 CVE ID, 패키지 버전, 날짜를 생성하는 것은 임무 실패보다 더 심각한 치명적인 오류입니다.
@@ -15,11 +15,10 @@
 - **검토 대상 기간**: 작업 시점 기준 과거 3개월 (분기별)
     - **🚨 REALITY CHECK & TIME PARADOX PROTOCOL (MANDATORY)**
         - **Logic**: IF (Target_Start_Date > Current_Real_Date) THEN:
-            1. **STOP** all search operations immediately.
-            2. **DO NOT** attempt to find "similar" or "past" data (e.g., do NOT fallback to 2024 or any other past year).
-            3. **REPORT** final output as: "No Data Available: Target period (YYYY-MM) is in the future relative to current knowledge cutoff."
-        - **Prohibition**: Do not attempt to simulate, extrapolate, or invent data for the future.
-
+            1. **STOP** 모든 검색 작업을 즉시 중단하시오.
+            2. **DO NOT** 유사 데이터나 과거 데이터(예: 2024년 데이터)를 찾으려고 시도하지 마시오.
+            3. **REPORT** 최종 결과를 다음과 같이 보고하시오: "No Data Available: Target period (YYYY-MM) is in the future relative to current knowledge cutoff."
+        - **Prohibition**: 미래의 데이터를 시뮬레이션, 추론, 또는 생성하지 마시오.
 - **대상 제품**: Red Hat Enterprise Linux (RHEL), Ubuntu LTS, Oracle Linux
 
 ## 4. 패치 권고 기준 및 대상 (Selection Criteria & Target Scope)
@@ -35,7 +34,7 @@
 7. **기타 장애 예방**: 서버나 주요 애플리케이션 중단 등 장애로 이어질 수 있는 버그가 수정된 경우
 
 ### 4.2. 검토 대상 패키지 (Target Packages)
-**단순히 Kernel 패키지만 검토하는 것이 아니라**, 아래와 같이 OS 운영 및 애플리케이션 구동에 영향을 줄 수 있는 모든 주요 패키지를 포함하여 검토한다.
+**단순히 커널(Kernel) 패키지만 검토하는 것이 아니라**, 아래와 같이 OS 운영 및 애플리케이션 구동에 영향을 줄 수 있는 모든 주요 패키지를 포함하여 검토한다.
 - **Kernel & Drivers**: kernel, firmware, device drivers (storage, network, gpu 등)
 - **Core System Services**: systemd, udev, journald, cronie, dbus 등 (부팅, 서비스 관리, 로깅 관련)
 - **Network Stack**: NetworkManager, iproute, bind-utils, firewalld, iptables, ethtool 등 (네트워크 연결 및 성능 저하 관련)
@@ -45,16 +44,20 @@
 
 ## 5. 분야별 상세 검토 방법 (Detailed Execution Steps)
 
-> **Strategic Execution (전략적 실행)**
+> **⚠️ 검색 출처 제한 (Strict Source Restriction)**
+> 정보 수집은 반드시 아래 명시된 **각 OS별 공식 벤더 사이트(Official Vendor Pages)** 만을 사용해야 합니다.
+> Google, Bing 등 **외부 검색 엔진을 사용하여 정보를 찾지 마십시오.**
+
+> **전략적 실행 (Strategic Execution)**
 > 한 번의 프롬프트로 모든 OS를 조사하려고 시도하지 마시오. 복잡도를 낮추고 정확도를 높이기 위해 **OS별로 작업을 나누어 순차적으로 진행**하는 것을 강력히 권장한다.
 > 1. RHEL 조사 및 결과 출력
 > 2. Ubuntu 조사 및 결과 출력
 > 3. Oracle Linux 조사 및 결과 출력
 
 ### 5.1. Red Hat Enterprise Linux (RHEL)
-1. **정보 수집**: [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지 활용
-    - **Search Strategy**: 미래 날짜(예: "Jan 2026") 검색은 반드시 실패하므로 시도하지 마십시오. 만약 특정 날짜 쿼리가 결과를 반환하지 않으면, **임의로 과거 연도(예: 2024)를 검색하지 말고**, 즉시 "No Data Found"를 확인하고 종료하십시오.
-2. **검색 필터 설정**:
+1. **정보 수집 (Information Gathering)**: 반드시 [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지를 사용하여 검색한다. (외부 검색 금지)
+    - **검색 전략 (Search Strategy)**: 미래 날짜(예: "Jan 2026") 검색은 반드시 실패하므로 시도하지 마십시오. 만약 특정 날짜 쿼리가 결과를 반환하지 않으면, **임의로 과거 연도(예: 2024)를 검색하지 말고**, 즉시 "No Data Found"를 확인하고 종료하십시오.
+2. **검색 필터 설정 (Filter Settings)**:
     - **Product**: "Red Hat Enterprise Linux"
     - **Variant**: 다음 4가지 Variant에 대해 각각 검색
         - "Red Hat Enterprise Linux for x86_64"
@@ -64,43 +67,43 @@
     - **Version**: "10, 9, 8"
     - **Architecture**: "x86_64"
     - **Advisory Type**: "Bug Fix", "Security Advisory"
-3. **중복 제거**: Product, Variant 별로 검색된 패치가 동일할 경우 하나만 선택
-4. **기간 필터링**: "Updated date" 기준 최근 3개월 이내 패치만 대상
-5. **Severity 선별**: Red Hat 분류 기준 "Critical", "Important" 패치만 선별
-6. **최신성 유지 및 설명 통합**: 
+3. **중복 제거 (Deduplication)**: Product, Variant 별로 검색된 패치가 동일할 경우 하나만 선택한다.
+4. **기간 필터링 (Period Filtering)**: "Updated date" 기준 최근 3개월 이내 패치만 대상으로 한다.
+5. **심각도 선별 (Severity Filtering)**: Red Hat 분류 기준 "Critical", "Important" 패치만 선별한다.
+6. **최신성 유지 및 설명 통합 (Version Control & Description)**: 
     - 동일한 패키지(예: kernel)에 대한 패치가 여러 건일 경우, **가장 최신 버전**의 패치 하나만 선택한다.
     - 단, 설명(`Patch Description`, `한글 설명`)에는 해당 분기 내에 포함된 이전 버전 패치들의 주요 변경/개선 내용도 함께 요약하여 포함해야 한다.
-7. **내용 분석 및 선정**:
-    - Advisory 세부 페이지의 "Description" 섹션 분석
-    - "Bug Fix(es) and Enhancement(s):" 또는 "Security Fix(es):" 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정
-8. **검토 대상 (Target Checking)**: [4.2. 검토 대상 패키지]에 정의된 모든 패키지를 대상으로 하며, 특히 커널 외에도 시스템 성능, 네트워크, 파일시스템, 보안 등 운영에 영향을 줄 수 있는 패치를 누락 없이 검토한다.
+7. **내용 분석 및 선정 (Analysis & Selection)**:
+    - Advisory 세부 페이지의 "Description" 섹션을 분석한다.
+    - "Bug Fix(es) and Enhancement(s):" 또는 "Security Fix(es):" 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정한다.
+8. **검토 대상 확인 (Target Checking)**: [4.2. 검토 대상 패키지]에 정의된 모든 패키지를 대상으로 하며, 특히 커널 외에도 시스템 성능, 네트워크, 파일시스템, 보안 등 운영에 영향을 줄 수 있는 패치를 누락 없이 검토한다.
 
 ### 5.2. Ubuntu LTS
-1. **정보 수집**: [Ubuntu Security Notices](https://ubuntu.com/security/notices) 페이지 활용
-2. **검색 필터 설정**:
+1. **정보 수집 (Information Gathering)**: 반드시 [Ubuntu Security Notices](https://ubuntu.com/security/notices) 페이지를 사용하여 검색한다. (외부 검색 금지)
+2. **검색 필터 설정 (Filter Settings)**:
     - **Releases**: 현재 지원되는 LTS 버전 (Ubuntu Pro 전용 제외)
         - 예: "24.04 LTS noble", "22.04 LTS jammy"
-    - "Apply filters" 적용
-3. **기간 필터링**: "Publication date" 기준 최근 3개월 이내 패치만 대상
-4. **내용 분석 및 선정**:
-    - "CVE ID" 및 상세 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정
+    - "Apply filters"를 적용한다.
+3. **기간 필터링 (Period Filtering)**: "Publication date" 기준 최근 3개월 이내 패치만 대상으로 한다.
+4. **내용 분석 및 선정 (Analysis & Selection)**:
+    - "CVE ID" 및 상세 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정한다.
     - 동일 패키지(예: linux-image)의 경우, 분기 내 최신 패치만 선택하되 이전 패치들의 주요 수정 사항도 설명에 포함한다.
-5. **검토 대상 (Target Checking)**: [4.2. 검토 대상 패키지]를 준수하여 커널 외 주요 시스템 패키지(systemd, openssl 등)의 보안 패치도 포함하여 검토한다.
+5. **검토 대상 확인 (Target Checking)**: [4.2. 검토 대상 패키지]를 준수하여 커널 외 주요 시스템 패키지(systemd, openssl 등)의 보안 패치도 포함하여 검토한다.
 
 ### 5.3. Oracle Linux
-1. **정보 수집**: [Oracle Linux Security](https://linux.oracle.com/security) 페이지 활용
-2. **검색 설정**:
-    - "Security Errata" 섹션 내 검색
-    - **버전**: Oracle Linux 10, 9, 8, 7, 6 Security Errata (주로 최신 버전 권장)
+1. **정보 수집 (Information Gathering)**: 반드시 [Oracle Linux Security](https://linux.oracle.com/security) 페이지를 사용하여 검색한다. (외부 검색 금지)
+2. **검색 설정 (Search Settings)**:
+    - "Security Errata" 섹션 내에서 검색한다.
+    - **버전**: Oracle Linux 10, 9, 8, 7, 6 Security Errata (주로 최신 버전을 권장한다)
     - **Advisory Type**: Bug, Security
-3. **기간 필터링**: "Release Date" 기준 최근 3개월 이내 패치만 대상 ("Updated date" 아님)
-4. **내용 분석 및 선정**:
-    - Advisory (예: `ELSA-2026-####`) 상세 페이지의 "Description" 분석
-    - "Updated Packages" 목록 확인 (Architecture: `x86_64`)
-    - Fix 된 버그 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정
-5. **최신성 유지 및 설명 통합**:
+3. **기간 필터링 (Period Filtering)**: "Release Date" 기준 최근 3개월 이내 패치만 대상으로 한다 ("Updated date" 아님).
+4. **내용 분석 및 선정 (Analysis & Selection)**:
+    - Advisory (예: `ELSA-2026-####`) 상세 페이지의 "Description"을 분석한다.
+    - "Updated Packages" 목록을 확인한다 (Architecture: `x86_64`).
+    - 수정된 버그 내용을 확인하여 [4. 패치 권고 기준]에 부합하는지 판단하여 선정한다.
+5. **최신성 유지 및 설명 통합 (Version Control & Description)**:
     - 동일 패키지의 경우 분기 내 최신 패치만 선택하되, 이전 패치들의 주요 수정 사항도 설명에 포함한다.
-6. **검토 대상 (Target Checking)**: [4.2. 검토 대상 패키지]에 명시된 kernel, systemd, glibc 등 모든 핵심 패키지를 대상으로 검토한다.
+6. **검토 대상 확인 (Target Checking)**: [4.2. 검토 대상 패키지]에 명시된 kernel, systemd, glibc 등 모든 핵심 패키지를 대상으로 검토한다.
 
 ## 6. 결과물 작성 양식 (Output Format)
 - **형식**: CSV (Comma-Separated Values)
