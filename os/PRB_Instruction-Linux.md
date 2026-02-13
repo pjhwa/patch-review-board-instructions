@@ -35,19 +35,19 @@
 7. **기타 장애 예방**: 서버나 주요 애플리케이션 중단 등 장애로 이어질 수 있는 버그가 수정된 경우
 
 ### 4.2. 검토 대상 패키지 (Target Packages)
-서버 환경에서의 중요도를 고려하여, **서버 구동 및 보안에 치명적인 패키지는 반드시 검토**하고, **GUI/데스크탑 전용 패키지는 검토에서 제외**한다.
+서버 환경에서의 중요도를 고려하여, **서버 구동 및 보안에 치명적인 패키지는 반드시 검토**하고, **GUI/데스크탑 전용 및 미들웨어(Middleware) 패키지는 OS 점검에서 제외**한다.
 
 #### **필수 검토 대상 (Prioritize - Must Review)**
 - **Kernel & Drivers**: `kernel`, `kernel-rt`, `linux-image`, `microcode`, `firmware` (시스템 안정성 핵심)
 - **Core System**: `systemd`, `glibc`, `openssl`, `openssh`, `sudo`, `bash`, `python*` (운영체제 기본 라이브러리 및 보안 도구)
-- **Network & Services**: `curl`, `wget`, `bind`, `haproxy`, `nginx`, `httpd` (네트워크 및 주요 서버 애플리케이션)
-- **Runtimes**: `java*`, `golang`, `nodejs` (서버 애플리케이션 런타임인 경우 확인)
+- **Network Tools**: `curl`, `wget`, `bind` (네트워크 및 기본 유틸리티)
 
 #### **검토 제외 대상 (Exclude - Ignore / Low Priority)**
+- **Middleware & Runtimes**: `nginx`, `httpd` (Apache), `tomcat`, `weblogic`, `java*`, `php`, `nodejs`, `haproxy` (별도 미들웨어/애플리케이션 점검 대상이므로 제외)
 - **Desktop/GUI Environment**: `ImageMagick`, `libX11`, `mesa`, `gtk`, `qt`, `gnome-*`, `kde-*` (서버 GUI 미사용)
 - **Client Applications**: `firefox`, `thunderbird`, `libreoffice` (서버에 설치되지 않음)
 - **Multimedia/Peripherals**: `alsa`, `pulseaudio`, `gstreamer`, `cups`, `sane` (사운드, 프린터 관련)
-- **Note**: 위 제외 대상 패키지의 취약점은 서버 보안 위협이 낮으므로 리포트에서 생략한다.
+- **Note**: 위 제외 대상 패키지의 취약점은 서버 보안 위협이 낮거나 타 영역 소관이므로 리포트에서 생략한다.
 
 ## 5. 분야별 상세 검토 방법 (Detailed Execution Steps)
 
