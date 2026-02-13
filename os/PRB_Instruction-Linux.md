@@ -60,6 +60,14 @@
 > - **DO NOT USE `web_fetch` (HTTP GET)**: 단순 URL 조회 시 빈 페이지(Shell)만 반환되므로 "No Data"로 오판하게 됩니다.
 > - **MUST USE Browser Tools**: 반드시 `browser_subagent` 등 브라우저 제어 도구를 사용하여 **페이지 로딩 대기 -> 필터 입력 -> 검색 버튼 클릭** 과정을 수행해야 합니다.
 
+> **🚨 BROWSER TOOL FAILURE CONTINGENCY (비상 프로토콜)**
+> 만약 `browser_subagent` 또는 `read_browser_page` 도구가 시스템 오류로 인해 실패(Error/Timeout)할 경우에 한하여, 다음의 **제한적 웹 검색(Restricted Web Search)**을 허용합니다.
+> - **조건**: 반드시 `web_search`를 사용하되, `site:` 연산자로 도메인을 제한해야 함.
+> - **RHEL**: `site:access.redhat.com/errata "RHEL 9" "Critical" after:2025-11-01`
+> - **Ubuntu**: `site:ubuntu.com/security/notices "22.04 LTS" "2025-11"`
+> - **Oracle**: `site:linux.oracle.com/security "ELSA-2025" "Oracle Linux 9"`
+> - **검증**: 검색된 URL이 공식 벤더 도메인인지 반드시 확인 후 데이터를 추출하시오.
+
 ### 5.1. Red Hat Enterprise Linux (RHEL)
 1. **정보 수집 (Information Gathering)**: 반드시 [Red Hat Errata Search](https://access.redhat.com/errata-search) 페이지를 사용하여 검색한다. (외부 검색 금지)
     - **기술적 주의사항 (Technical Note)**: 이 페이지는 동적 폼입니다. `read_url`을 사용하지 말고, **브라우저 도구**를 사용하여 페이지에 접속한 후 폼이 로드될 때까지 기다려야 합니다.
