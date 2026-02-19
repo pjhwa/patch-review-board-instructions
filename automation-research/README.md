@@ -1,51 +1,54 @@
-# Patch Review Board (PRB) Automation Research
+# 🛡️ OS Patch Review Board Automation
 
-This folder contains the latest research and tools for automating the quarterly OS Patch Review Board (PRB) process using AI Agents.
+> **Automated Security Advisory Collection, Analysis, and Reporting Pipeline**
 
-## Overview
+This project provides a fully automated workflow to replace manual OS patch reviews. It harvests security advisories from vendor sources, filters them through a critical infrastructure lens, and uses AI to generate decision-ready review reports.
 
-The goal is to transition from a manual review process to an AI-driven one. This updated workflow (Iteration 4) introduces **Strict Pruning** and **Aggregation** logic to prepare high-quality data for a "Real LLM Review".
+## 🚀 Key Features
 
-## Workflow Components
+*   **Multi-Vendor Harvesting**: Automated scraping for **Red Hat** (Portal), **Oracle Linux** (Mailing Lists), and **Ubuntu LTS** (USN Notices).
+*   **Intelligent Preprocessing**:
+    *   **Whitelist/Blacklist**: Automatically excludes non-essential packages (desktop apps, games) and focuses on Core Infra (Kernel, glibc, systemd, container runtimes).
+    *   **Contextual Parsing**: Extracts exact `dist_version` (e.g., distinguishing RHEL 9 from OpenShift) and handles complex versioning logic.
+    *   **Aggregation**: Groups multiple updates for the same component to present a unified "latest state" view.
+*   **AI-Powered Analysis**: A specialized AI Skill (`SKILL_PatchReviewBoard.md`) analyzes semantic failure modes (System Hang, Data Loss, RCE) and generates bilingual (Korean/English) impact reports.
 
-1.  **Collection**: `batch_collector.js` (Node.js/Playwright)
-    -   Scrapes Red Hat, Oracle Linux (Mailing List), and Ubuntu (Web) for advisories.
-    -   Outputs JSON files to `batch_data/`.
+## 📂 Project Structure
 
-2.  **Preprocessing**: `patch_preprocessing.py` (Python)
-    -   **Pruning**: Strictly whitelists Core System Components (kernel, glibc, systemd) and blacklists applications (firefox, thunderbird).
-    -   **Aggregation**: Groups multiple patches for the same component in the quarter. Merges historical impacts into the latest patch description.
-    -   **Output**: Generates `patches_for_llm_review.json` for the Agent.
+| File | Description |
+|---|---|
+| `batch_collector.js` | **Collector**. Node.js + Playwright script to scrape raw advisories. |
+| `patch_preprocessing.py` | **Refiner**. Python script to filter, dedupe, and aggregate raw data. |
+| `SKILL_PatchReviewBoard.md` | **Brain**. The AI Agent Skill definition for review logic and reporting. |
+| `GUIDE.md` | **[Deep Dive]**. Detailed architecture and logic explanation. |
+| `batch_data/` | **Storage**. Directory where raw JSONs are saved. |
 
-3.  **Agent Execution**:
-    -   The AI Agent reads `patches_for_llm_review.json`.
-    -   It performs a semantic analysis of the `full_text` and `history` to determine **Critical System Impact** (Hang, Crash, Data Loss, RCE).
-    -   It generates the final `patch_review_final_report.csv`.
+## ⚡ Quick Start
 
-## Usage Instructions (for AI Agents)
+### Prerequisites
+*   **Node.js** (v18+) & **Playwright**
+*   **Python** (v3.9+)
 
-### Step 1: Install Dependencies
+### 1. Collect Data
+Run the headless browser collector to harvest the latest advisories:
 ```bash
 npm install playwright
-pip install -r requirements.txt # (if applicable)
-```
-
-### Step 2: Run Collection taking ~10 mins
-```bash
 node batch_collector.js
 ```
 
-### Step 3: Run Preprocessing
+### 2. Preprocess
+Clean and aggregate the data into a review packet:
 ```bash
 python patch_preprocessing.py
 ```
-*This generates `patches_for_llm_review.json`.*
+*Output: `patches_for_llm_review.json`*
 
-### Step 4: LLM Review & Reporting
-**Agent Task:**
-1.  Read `patches_for_llm_review.json`.
-2.  Evaluate each candidate against the **Critical System Impact** criteria:
-    -   *Include*: System Hang, Kernel Panic, Data Corruption, Boot Failure, Critical Security (Root/RCE).
-    -   *Exclude*: Minor bug fixes, local DoS, application updates.
-3.  Write the final report to `patch_review_final_report.csv` with the following columns:
-    -   `Category`, `Release Date`, `Vendor`, `Model / Version`, `Detailed Version`, `Patch Name`, `Patch Target`, `Reference Site`, `Patch Description`, `한글 설명`
+### 3. AI Review (Simulation)
+Use an AI Agent with the defined skill to generate the final CSV:
+```python
+# The agent reads SKILL_PatchReviewBoard.md and processes the JSON.
+# Output: patch_review_final_report.csv
+```
+
+## 📖 Documentation
+For a deep dive into the architecture, filtering logic, and data flow, please read the **[Automation Research Guide](GUIDE.md)**.
