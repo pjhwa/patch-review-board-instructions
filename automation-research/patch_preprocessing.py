@@ -15,57 +15,54 @@ OUTPUT_FILE = "patches_for_llm_review.json"
 
 # --- CONFIGURATION: PRUNING RULES ---
 
-# STRICT WHITELIST: ONLY these components are considered for the OS Patch Report.
-# "Everything except the whitelist is removed."
+# STRICT WHITELIST: ONLY components capable of causing "System Critical" failures.
+# Criteria: Hang/Crash, Data Loss, Failover Failure, Hardware Malfunction, Critical Security.
 
-# Core System Components for RHEL & Ubuntu
-# Refined to be "Sophisticated" & "Core Only"
 SYSTEM_CORE_COMPONENTS = [
-    # Kernel & Boot
-    "kernel", "linux-image", "linux-headers", "linux-modules", # Ubuntu kernel naming
-    "grub", "grub2", "shim", "mokutil", "efibootmgr", # Bootloaders
-    "microcode", "linux-firmware", "dracut", "kmod",
-
-    # Base System & Init
-    "systemd", "udev", "initscripts", "sysvinit", "upstart",
-    "glibc", "glib2", "info", "setup", "basesystem",
-    "dbus", "dbus-broker", "polkit",
+    # 1. Kernel & Hardware Interaction (Hang, Crash, Panic risk)
+    "kernel", "linux-image", "microcode", "linux-firmware", 
+    "shim", "grub", "grub2", "efibootmgr", "mokutil", # Boot critical
     
-    # Security, Auth & Crypto
-    "openssh", "sshd", "sudo", "pam", "audit", "polkit",
-    "selinux-policy", "libselinux", "libsepol",
-    "openssl", "gnutls", "nss", "ca-certificates", "crypto-policies",
-    "gpgme", "gnupg", "keyutils",
-    
-    # Core Networking
-    "networkmanager", "firewalld", "iptables", "nftables", "iproute", "net-tools",
-    "bind-utils", "bind-libs", "dnsmasq", "dhcp", "dhclient", "chrony", "ntp",
-    
-    # Storage & Filesystems
+    # 2. Storage & Filesystem (Data Loss, Corruption risk)
     "lvm2", "device-mapper", "multipath-tools", "kpartx", 
-    "iscsi-initiator-utils", "open-iscsi",
-    "nfs-utils", "cifs-utils", "e2fsprogs", "xfsprogs", "dosfstools",
+    "e2fsprogs", "xfsprogs", "dosfstools", "nfs-utils", "cifs-utils",
+    "iscsi-initiator-utils", "open-iscsi", "smartmontools",
     
-    # Virtualization & Containers (Infrastructure Level)
+    # 3. Cluster & High Availability (Failover Failure risk)
+    "pacemaker", "corosync", "pcs", "fence-agents", "resource-agents", "keepalived",
+    
+    # 4. Critical Networking (Connectivity Loss risk)
+    "networkmanager", "firewalld", "iptables", "nftables", 
+    "bind", "bind-utils", # DNS failure = Service outage
+    "dhcp", "dhclient",
+    
+    # 5. Core System Services (System Hang/Unavailability risk)
+    "systemd", "udev", "initscripts", "glibc", # Basic execution env
+    "dbus", "audit", # Security audit / IPC
+    
+    # 6. Critical Security (Remote Compromise risk)
+    "openssl", "gnutls", "nss", "ca-certificates",
+    "openssh", "sshd", "sudo", "pam", "polkit",
+    "selinux-policy", "libselinux",
+    
+    # 7. Virtualization Infrastructure (Host Crash risk)
     "libvirt", "qemu-kvm", "qemu", "kvm",
-    "docker", "podman", "runc", "containerd", "buildah", "skopeo", 
-    "container-tools", "kubernetes", "kubelet", 
-    
-    # High Availability (Cluster)
-    "pacemaker", "corosync", "pcs", "fence-agents", "resource-agents", 
-    
-    # Essential Shell & Utils
-    "bash", "coreutils", "util-linux", "sed", "awk", "grep", 
-    "rpm", "dnf", "yum", "apt", "dpkg" # Package management
+    "docker", "podman", "runc", "containerd", "kubernetes", "kubelet"
 ]
 
-# Blacklist is technically redundant with strict whitelist, 
-# but kept for substring safety (e.g. to ensure 'firefox' doesn't match 'firewalld' via lazy matching)
+# REMOVED from previous broad list:
+# - bash, coreutils, sed, awk, grep: Bugs here rarely cause System Hang/Crash (usually just script error).
+# - python, ruby, perl, php: Runtimes, not system core.
+# - gtk, gnome, X11: GUI not critical for server stability.
+
+# Blacklist (Redundant but safety net)
 EXCLUDED_PACKAGES_EXPLICIT = [
-    "firefox", "thunderbird", "libreoffice", "evolution", "pidgin", 
+    "firefox", "thunderbird", "libreoffice", "evolution", 
     "gimp", "inkscape", "cups", "avahi", "bluez", "pulseaudio", "pipewire",
-    "gnome", "kde", "gtk", "qt", "xorg", "wayland", "mesa", "webkit",
-    "python-urllib3", "python-requests", "nodejs", "ruby", "perl", "php" # App runtimes unless core
+    "gnome", "kde", "xorg", "wayland", "mesa", "webkit",
+    "python-urllib3", "python-requests", "nodejs", "ruby", "perl", "php",
+    "tar", "gzip", "zip", "unzip", "vim", "nano", "emacs", # Editors/Tools
+    "compiz", "alsa", "sound"
 ]
 
 def get_component_name(vendor, title, summary):
@@ -107,7 +104,7 @@ def is_system_critical(vendor, component, text):
         if "unbreakable enterprise kernel" in txt and "kernel" in comp: return True
         return False
 
-    # --- RULE 2: STRICT WHITELIST (RHEL/Ubuntu) ---
+    # --- RULE 2: STRICT WHITELIST (NARROWED) ---
     
     # 2.1 First, Check Blacklist for explicit exclusion (Safety Net)
     for bad in EXCLUDED_PACKAGES_EXPLICIT:
