@@ -9,8 +9,8 @@ import glob
 # It does NOT perform the review. It performs the mechanical PRE-PROCESSING 
 # (Collection, Pruning, Aggregation) to prepare a clean dataset for the AI Agent (LLM) to review.
 
-INPUT_FILE = "patch_review_summary.md" # Source data (aggregated from RSS/Web)
-JSON_DIR = r"extracted_data\batch_data"
+# INPUT_FILE = "patch_review_summary.md" # Source data (aggregated from RSS/Web)
+JSON_DIR = r"batch_data"
 OUTPUT_FILE = "patches_for_llm_review.json"
 
 # --- CONFIGURATION: PRUNING RULES ---
@@ -72,47 +72,44 @@ def is_system_critical(component, text):
     return False
 
 def preprocess_patches():
-    print(f"Loading data from {INPUT_FILE}...")
-    with open(INPUT_FILE, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    parts = re.split(r'(\n## \d+\. \[.*?\] .*?\n)', content)
+    print(f"Loading data from {JSON_DIR}...")
+    
     raw_list = []
+    
+    # --- Step 1: Ingest JSONs directly ---
+    json_files = glob.glob(os.path.join(JSON_DIR, "*.json"))
+    print(f"Found {len(json_files)} JSON files.")
 
-    # --- Step 1: Ingest ---
-    for i in range(1, len(parts), 2):
-        header = parts[i].strip()
-        body = parts[i+1].strip()
-        
-        match = re.search(r'\[(.*?)\]\s+(.*?)\s+\((.*?)\)', header)
-        if not match: continue
-        
-        vendor = match.group(1)
-        patch_id = match.group(2)
-        date_str = match.group(3)
-        
-        # Merge JSON metadata if available
-        json_path = os.path.join(JSON_DIR, f"{patch_id}.json")
-        json_meta = {}
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, 'r', encoding='utf-8') as jf:
-                    json_meta = json.load(jf)
-                    if 'pubDate' in json_meta: date_str = json_meta['pubDate'][:10]
-            except: pass
+    for json_path in json_files:
+        try:
+            with open(json_path, 'r', encoding='utf-8') as jf:
+                data = json.load(jf)
+                
+            vendor = data.get('vendor', 'Unknown')
+            patch_id = data.get('id', os.path.basename(json_path).replace('.json', ''))
+            
+            # Normalization
+            date_str = data.get('pubDate', data.get('dateStr', ''))
+            if date_str: date_str = date_str[:10]  # First 10 chars (YYYY-MM-DD or similar) -> simplistic
+            
+            title = data.get('title', '')
+            summary = data.get('synopsis', '')
+            full_text = data.get('full_text', '') + " " + title + " " + summary
+            
+            component = get_component_name(vendor, title, summary)
+            
+            raw_list.append({
+                'id': patch_id,
+                'vendor': vendor,
+                'date': date_str,
+                'component': component,
+                'summary': summary,
+                'full_text': full_text,
+                'ref_url': data.get('url', '')
+            })
 
-        full_text = f"{header} {body} {json_meta.get('full_text', '')}"
-        component = get_component_name(vendor, header, body)
-
-        raw_list.append({
-            'id': patch_id,
-            'vendor': vendor,
-            'date': date_str,
-            'component': component,
-            'summary': body,
-            'full_text': full_text,
-            'ref_url': json_meta.get('url', f"https://access.redhat.com/errata/{patch_id}" if vendor == "Red Hat" else "")
-        })
+        except Exception as e:
+            print(f"Error reading {json_path}: {e}")
 
     print(f"Raw Patches: {len(raw_list)}")
 
