@@ -1,112 +1,51 @@
-# OS Patch Advisory Automation Research
+# Patch Review Board (PRB) Automation Research
 
-This directory contains the implementation of an automated OS patch advisory collection system for Red Hat Enterprise Linux (RHEL), Oracle Linux (UEK), and Ubuntu LTS distributions.
+This folder contains the latest research and tools for automating the quarterly OS Patch Review Board (PRB) process using AI Agents.
 
-## Purpose
+## Overview
 
-Replace manual vendor website searches with **reliable, automated batch collection** covering specified time periods (e.g., Nov 2025 - Feb 2026).
+The goal is to transition from a manual review process to an AI-driven one. This updated workflow (Iteration 4) introduces **Strict Pruning** and **Aggregation** logic to prepare high-quality data for a "Real LLM Review".
 
-## Contents
+## Workflow Components
 
-### Documentation
-- **`DEVELOPMENT_LOG.md`**: Comprehensive development history, technical decisions, and script evolution (v1→v8)
-- **`INSTALL_PLAYWRIGHT_SKILL_LINUX.md`**: Step-by-step guide for installing Playwright on Linux servers
-- **`README.md`**: This file
+1.  **Collection**: `batch_collector.js` (Node.js/Playwright)
+    -   Scrapes Red Hat, Oracle Linux (Mailing List), and Ubuntu (Web) for advisories.
+    -   Outputs JSON files to `batch_data/`.
 
-### Scripts
-- **`batch_collector.js`**: Unified collection script for all 3 vendors (latest version)
-  - **Red Hat**: Web scraping with pagination (10 pages, date-filtered)
-  - **Oracle**: Mailing list archive parsing (trusted feed)
-  - **Ubuntu**: Web scraping with LTS filtering (30 pages, date-filtered)
+2.  **Preprocessing**: `patch_preprocessing.py` (Python)
+    -   **Pruning**: Strictly whitelists Core System Components (kernel, glibc, systemd) and blacklists applications (firefox, thunderbird).
+    -   **Aggregation**: Groups multiple patches for the same component in the quarter. Merges historical impacts into the latest patch description.
+    -   **Output**: Generates `patches_for_llm_review.json` for the Agent.
 
-### Utilities
-- **`apply_openclaw_fix_v7.sh`**: OpenClaw Gateway port shift + proxy fix for Playwright skill execution
+3.  **Agent Execution**:
+    -   The AI Agent reads `patches_for_llm_review.json`.
+    -   It performs a semantic analysis of the `full_text` and `history` to determine **Critical System Impact** (Hang, Crash, Data Loss, RCE).
+    -   It generates the final `patch_review_final_report.csv`.
 
-## Quick Start
+## Usage Instructions (for AI Agents)
 
-### Prerequisites
-- Linux server with Node.js v22+
-- Playwright installed (`npm install playwright`)
-- OpenClaw Gateway (if using OpenClaw ecosystem)
-
-### Running Collection
-
+### Step 1: Install Dependencies
 ```bash
-# On Linux server (e.g., tom26)
-cd ~/.openclaw/workspace
 npm install playwright
-npx playwright install
-sudo npx playwright install-deps
-
-# Run batch collector
-node batch_collector.js
-
-# Results will be saved to batch_data/ directory
-# - RHSA-*.json (Red Hat)
-# - ELSA-*.json (Oracle)
-# - USN-*.json (Ubuntu)
+pip install -r requirements.txt # (if applicable)
 ```
 
-### Configuration
-
-Edit `batch_collector.js` to adjust:
-- `TARGET_START_DATE` and `TARGET_END_DATE`: Collection period
-- `UBUNTU_LTS_VERSIONS`: Target Ubuntu LTS versions (default: 22.04, 24.04)
-- `MAX_REDHAT_PAGES`, `MAX_UBUNTU_PAGES`: Pagination limits
-- `MAX_CONCURRENCY`: Parallel browser instances
-
-## Collection Strategy
-
-| Vendor | Method | Source | Reliability |
-|--------|--------|--------|-------------|
-| **Red Hat** | Web Scraping | `access.redhat.com/errata-search` | High |
-| **Oracle** | Mailing List Parsing | `oss.oracle.com/pipermail/el-errata` | Very High |
-| **Ubuntu** | Web Scraping | `ubuntu.com/security/notices` | High |
-
-### Why These Methods?
-
-- **Red Hat**: Official errata search with robust pagination (date-sorted, early termination)
-- **Oracle**: Official announcement channel (immune to UI changes, static HTML)
-- **Ubuntu**: Pagination + post-collection LTS filtering (RSS feeds incomplete)
-
-## Typical Results
-
-For a 3-month period (Nov 2025 - Feb 2026):
-- **Red Hat**: ~250 advisories
-- **Oracle UEK**: ~60 advisories
-- **Ubuntu LTS**: ~50-100 advisories (22.04 + 24.04)
-
-**Total**: ~300-400 unique security advisories
-
-## OpenClaw Integration
-
-If using OpenClaw, apply the gateway fix first:
+### Step 2: Run Collection taking ~10 mins
 ```bash
-bash apply_openclaw_fix_v7.sh
-# This shifts the gateway from port 21000→21100 and creates a reverse proxy
+node batch_collector.js
 ```
 
-## Next Steps
+### Step 3: Run Preprocessing
+```bash
+python patch_preprocessing.py
+```
+*This generates `patches_for_llm_review.json`.*
 
-After collection:
-1. Download `batch_data/` directory
-2. Filter for "Critical/Important" severity levels
-3. Generate final patch recommendation report
-
-## Technical Stack
-
-- **Runtime**: Node.js v22
-- **Automation**: Playwright (headless Chromium)
-- **Concurrency**: 3 parallel browsers (configurable)
-- **Output**: JSON files (one per advisory)
-
-## Revision History
-
-- **2026-02-13**: Initial release with v8 batch_collector.js
-  - Red Hat: 10-page pagination with date-based early termination
-  - Oracle: Mailing list archive parsing
-  - Ubuntu: Web scraping (replaced RSS feed approach)
-
-## Support
-
-For detailed technical background, strategic decisions, and troubleshooting, see `DEVELOPMENT_LOG.md`.
+### Step 4: LLM Review & Reporting
+**Agent Task:**
+1.  Read `patches_for_llm_review.json`.
+2.  Evaluate each candidate against the **Critical System Impact** criteria:
+    -   *Include*: System Hang, Kernel Panic, Data Corruption, Boot Failure, Critical Security (Root/RCE).
+    -   *Exclude*: Minor bug fixes, local DoS, application updates.
+3.  Write the final report to `patch_review_final_report.csv` with the following columns:
+    -   `Category`, `Release Date`, `Vendor`, `Model / Version`, `Detailed Version`, `Patch Name`, `Patch Target`, `Reference Site`, `Patch Description`, `한글 설명`

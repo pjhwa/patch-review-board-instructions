@@ -266,3 +266,4 @@ for (let i = 0; i < MAX_UBUNTU_PAGES && shouldContinue; i++) {
 - **2026-02-13 06:00** - Initial log (v1-v5 documentation)
 - **2026-02-13 15:30** - Added v6 (Red Hat expansion) and v7 (Ubuntu RSS)
 - **2026-02-13 15:56** - Added v8 (Ubuntu web scraping pivot), finalized strategy table
+- **2026-02-19 11:25** - **Iteration 4 (Final)**: Implemented `patch_preprocessing.py` for Strict Pruning & Aggregation. Updated workflow to separate "Mechanical Prep" from "Real AI Review".
