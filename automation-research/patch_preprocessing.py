@@ -15,60 +15,119 @@ OUTPUT_FILE = "patches_for_llm_review.json"
 
 # --- CONFIGURATION: PRUNING RULES ---
 
-# Whitelist: ONLY these components are considered for the OS Patch Report.
-# Everything else (Applications, Dev Tools, Libraries) is Pruned in Step 2.
+# STRICT WHITELIST: ONLY these components are considered for the OS Patch Report.
+# "Everything except the whitelist is removed."
+
+# Core System Components for RHEL & Ubuntu
+# Refined to be "Sophisticated" & "Core Only"
 SYSTEM_CORE_COMPONENTS = [
-    "kernel", "glibc", "systemd", "udev", "grub", "dracut", "initscripts", 
-    "openssh", "sshd", "sudo", "pam", "audit", "selinux", "firewalld", "iptables",
-    "networkmanager", "dhcp", "bind", "dnsmasq", 
-    "lvm", "multipath", "iscsi", "nfs", "cifs", "samba",
-    "firmware", "microcode", "bios",
-    "docker", "podman", "container-tools", "runc", "k8s", "kubelet",
-    "libvirt", "qemu", "kvm",
-    "bash", "shell", "coreutils", "util-linux",
-    "openssl", "gnutls", "ca-certificates",
-    "pcs", "pacemaker", "corosync", "fence"
+    # Kernel & Boot
+    "kernel", "linux-image", "linux-headers", "linux-modules", # Ubuntu kernel naming
+    "grub", "grub2", "shim", "mokutil", "efibootmgr", # Bootloaders
+    "microcode", "linux-firmware", "dracut", "kmod",
+
+    # Base System & Init
+    "systemd", "udev", "initscripts", "sysvinit", "upstart",
+    "glibc", "glib2", "info", "setup", "basesystem",
+    "dbus", "dbus-broker", "polkit",
+    
+    # Security, Auth & Crypto
+    "openssh", "sshd", "sudo", "pam", "audit", "polkit",
+    "selinux-policy", "libselinux", "libsepol",
+    "openssl", "gnutls", "nss", "ca-certificates", "crypto-policies",
+    "gpgme", "gnupg", "keyutils",
+    
+    # Core Networking
+    "networkmanager", "firewalld", "iptables", "nftables", "iproute", "net-tools",
+    "bind-utils", "bind-libs", "dnsmasq", "dhcp", "dhclient", "chrony", "ntp",
+    
+    # Storage & Filesystems
+    "lvm2", "device-mapper", "multipath-tools", "kpartx", 
+    "iscsi-initiator-utils", "open-iscsi",
+    "nfs-utils", "cifs-utils", "e2fsprogs", "xfsprogs", "dosfstools",
+    
+    # Virtualization & Containers (Infrastructure Level)
+    "libvirt", "qemu-kvm", "qemu", "kvm",
+    "docker", "podman", "runc", "containerd", "buildah", "skopeo", 
+    "container-tools", "kubernetes", "kubelet", 
+    
+    # High Availability (Cluster)
+    "pacemaker", "corosync", "pcs", "fence-agents", "resource-agents", 
+    
+    # Essential Shell & Utils
+    "bash", "coreutils", "util-linux", "sed", "awk", "grep", 
+    "rpm", "dnf", "yum", "apt", "dpkg" # Package management
 ]
 
-# Blacklist: User-specific exclusions (Applications, GUI, etc.)
-EXCLUDED_PACKAGES = [
-    "python-urllib3", "thunderbird", "firefox", "libreoffice", "evolution", 
+# Blacklist is technically redundant with strict whitelist, 
+# but kept for substring safety (e.g. to ensure 'firefox' doesn't match 'firewalld' via lazy matching)
+EXCLUDED_PACKAGES_EXPLICIT = [
+    "firefox", "thunderbird", "libreoffice", "evolution", "pidgin", 
     "gimp", "inkscape", "cups", "avahi", "bluez", "pulseaudio", "pipewire",
-    "gnome", "gtk", "qt", "xorg", "wayland", "mesa", "webkit",
-    "flatpak", "snapd"
+    "gnome", "kde", "gtk", "qt", "xorg", "wayland", "mesa", "webkit",
+    "python-urllib3", "python-requests", "nodejs", "ruby", "perl", "php" # App runtimes unless core
 ]
 
 def get_component_name(vendor, title, summary):
     text = (title + " " + summary).lower()
     
-    # 1. Check Keywords
-    keywords = SYSTEM_CORE_COMPONENTS + ["python", "java", "ruby", "perl", "php"]
-    for k in keywords:
-        if re.search(fr'\b{re.escape(k)}\b', text):
-            if k in ["java", "openjdk"]: return "java"
-            return k
+    # 1. Oracle Special Case: UEK
+    if vendor == "Oracle":
+        if "uek" in text or "unbreakable enterprise kernel" in text:
+            return "kernel-uek"
+        return "other" # Will be filtered out
+
+    # 2. Ubuntu/RHEL Heuristics
+    # Check for direct matches in whitelist first
+    for core in SYSTEM_CORE_COMPONENTS:
+        # Regex word boundary check for accuracy (avoid 'lib' matching 'glib')
+        if re.search(fr'\b{re.escape(core)}\b', text):
+            return core
             
-    # 2. Regex fallback <name>-<version>
+    # 3. Regex fallback <name>-<version>
     m = re.search(r'([a-z0-9]+(-[a-z0-9]+)*)-\d+\.\d+', text)
-    if m: return m.group(1)
+    if m: 
+        name = m.group(1)
+        # Verify if extracted name partial matches core list (so we don't return 'firefox')
+        for core in SYSTEM_CORE_COMPONENTS:
+            if core == name or (name.startswith(core + "-")):
+                return core
+        return name
         
     return "other"
 
-def is_system_critical(component, text):
+def is_system_critical(vendor, component, text):
     comp = component.lower()
     txt = text.lower()
     
-    # 1. Blacklist
-    for bad in EXCLUDED_PACKAGES:
-        if bad in comp or bad in txt: return False
-        
-    # 2. Whitelist
+    # --- RULE 1: ORACLE LINUX IS "UEK ONLY" ---
+    if vendor == "Oracle":
+        if "kernel-uek" in comp: return True
+        # Allow variations like 'Unbreakable Enterprise Kernel'
+        if "unbreakable enterprise kernel" in txt and "kernel" in comp: return True
+        return False
+
+    # --- RULE 2: STRICT WHITELIST (RHEL/Ubuntu) ---
+    
+    # 2.1 First, Check Blacklist for explicit exclusion (Safety Net)
+    for bad in EXCLUDED_PACKAGES_EXPLICIT:
+        if bad == comp or (f"{bad}-" in comp): return False
+
+    # 2.2 Verify against Whitelist
     for core in SYSTEM_CORE_COMPONENTS:
-        if core == comp or f"{core}-" in comp or f" {core} " in txt:
-            return True
-        # Loose match for kernel/firmware
-    if "kernel" in comp or "boot" in comp: return True
+        # Exact match or prefix match (e.g. 'kernel' matches 'kernel-header')
+        if core == comp: return True
+        if comp.startswith(f"{core}-"): return True
         
+        # Text based match (fallback if component detection failed but text is clear)
+        if f"package {core}" in txt or f"{core} package" in txt:
+            return True
+
+    # 2.3 Special Case: 'Kernel' keyword
+    if "kernel" in comp and "texlive" not in comp: # texlive-kernel is a doc package
+        return True
+        
+    # If not in whitelist -> PRUNE
     return False
 
 def preprocess_patches():
@@ -118,7 +177,7 @@ def preprocess_patches():
     for p in raw_list:
         text = p['full_text'].lower()
         
-        # Red Hat Specifics
+        # Red Hat Specific Exclusions (Product filtering)
         if p['vendor'] == "Red Hat":
             if "update services for sap" in text: continue
             if "aus" in text or "eus" in text: continue
@@ -126,8 +185,9 @@ def preprocess_patches():
             if "rhui" in text or "update infrastructure" in text: continue
             if "openshift" in text or "openstack" in text: continue
             
-        # Criticality Check
-        if not is_system_critical(p['component'], text):
+        # Criticality Check (Strict Whitelist + Oracle Rule)
+        if not is_system_critical(p['vendor'], p['component'], text):
+            # print(f"Pruned: {p['vendor']} {p['component']} ({p['id']})")
             continue
             
         pruned_list.append(p)
@@ -138,6 +198,8 @@ def preprocess_patches():
     # Group by Vendor + Component to prepare for LLM Review
     grouped = {}
     for p in pruned_list:
+        # Use simple component name for grouping (e.g. 'kernel-uek' or 'bind')
+        # We need to normalize component names further for aggregation if needed
         key = (p['vendor'], p['component'])
         if key not in grouped: grouped[key] = []
         grouped[key].append(p)
@@ -159,7 +221,11 @@ def preprocess_patches():
             })
             
         latest['history'] = history_context
-        latest['review_instructions'] = f"Analyze this '{latest['component']}' patch. Check for System Hang, Data Loss, Boot Fail, or Critical Security (RCE/Root). Ignore minor bugs. Merge insights from {len(history_context)} previous patches if they are relevant impact-wise."
+        # Contextual Instructions based on Vendor
+        review_note = ""
+        if latest['vendor'] == "Oracle": review_note = "Only verify this is UEK kernel."
+        
+        latest['review_instructions'] = f"Analyze this '{latest['component']}' patch ({review_note}). Check for System Hang, Data Loss, Boot Fail, or Critical Security. Ignore minor bugs. Merge insights from {len(history_context)} previous patches if they are relevant."
         
         final_candidates.append(latest)
         
