@@ -1,269 +1,222 @@
-# OS Patch Advisory Automation - Development Log
+# OS 패치 보안 권고 자동화 - 개발 일지
 
-## Context
+## 배경 (Context)
 
-This document tracks the implementation of an automated OS patch advisory collection system for Red Hat Enterprise Linux (RHEL), Oracle Linux (UEK), and Ubuntu LTS distributions. The goal is to replace manual vendor website searches with reliable, automated batch collection covering a 3-month window (Nov 2025 - Feb 2026).
-
----
-
-## Technical Background
-
-### Initial Challenge: Search Query Limitations
-
-The original `PRB_Instruction-Linux.md` relied on web search queries to find patches. This approach had critical flaws:
-- **Unreliable Indexing**: Search engines don't index all vendor advisory pages consistently
-- **Rate Limiting**: Frequent searches trigger anti-bot measures
-- **Incomplete Coverage**: Recent advisories often missing from search results
-- **No Temporal Control**: Cannot reliably filter by publication date ranges
-
-### Solution: Batch Processing Strategy
-
-Instead of search queries, we implemented **direct vendor source parsing**:
-- **Red Hat**: Paginated web scraping of errata search (10 pages, date-filtered)
-- **Oracle**: Official mailing list archive parsing (`oss.oracle.com/pipermail/el-errata`)
-- **Ubuntu**: Web scraping of security notices (30 pages, LTS-filtered)
+본 문서는 Red Hat Enterprise Linux (RHEL), Oracle Linux (UEK), Ubuntu LTS 배포판에 대한 자동화된 OS 패치 보안 권고 수집 시스템의 구현 과정을 추적합니다. 목표는 수동 벤더 사이트 검색을 대체하여 신뢰할 수 있는 자동화된 일괄 수집(2025년 11월 ~ 2026년 2월) 체계를 구축하는 것입니다.
 
 ---
 
-## Infrastructure Setup
+## 기술적 배경
 
-### OpenClaw Gateway Fix (v7)
+### 초기 과제: 검색 쿼리의 한계
 
-**Problem**: OpenClaw Gateway bound only to `localhost`, preventing external Playwright skill execution.
+기존 `PRB_Instruction-Linux.md`는 패치를 찾기 위해 웹 검색 쿼리에 의존했습니다. 이 접근 방식에는 심각한 결함이 있었습니다:
+- **불안정한 인덱싱**: 검색 엔진이 모든 벤더 권고 페이지를 일관되게 인덱싱하지 않음
+- **속도 제한(Rate Limiting)**: 잦은 검색이 봇 차단 조치를 유발함
+- **불완전한 커버리지**: 최신 권고가 검색 결과에서 누락되는 경우가 잦음
+- **시계열 제어 불가**: 게시일 기준으로 확실하게 필터링하기 어려움
 
-**Solution**: Port Shift + Proxy Strategy
+### 해결책: 일괄 처리(Batch Processing) 전략
+
+검색 쿼리 대신 **직접적인 벤더 소스 파싱**을 구현했습니다:
+- **Red Hat**: 에라타 검색 페이지네이션 스크래핑 (10페이지, 날짜 필터링)
+- **Oracle**: 공식 메일링 리스트 아카이브 파싱 (`oss.oracle.com/pipermail/el-errata`)
+- **Ubuntu**: 보안 공지(USN) 웹 스크래핑 (30페이지, LTS 필터링)
+
+---
+
+## 인프라 설정
+
+### OpenClaw 게이트웨이 수정 (v7)
+
+**문제점**: OpenClaw 게이트웨이가 `localhost`에만 바인딩되어 외부 Playwright 스킬 실행이 불가능함.
+
+**해결책**: 포트 시프트(Port Shift) + 프록시 전략
 ```bash
 # apply_openclaw_fix_v7.sh
 ORIGINAL_PORT=21000
 NEW_PORT=21100
-# Shifts gateway to 21100, creates reverse proxy at 21000
+# 게이트웨이를 21100으로 이동하고, 21000에 리버스 프록시 생성
 ```
 
-**Validation**: `curl http://localhost:21000/health` → `{"status":"healthy"}`
+**검증**: `curl http://localhost:21000/health` → `{"status":"healthy"}`
 
-### Playwright Skill Installation
+### Playwright 스킬 설치
 
-**Platform**: Linux (tom26 server)
-**Method**: Direct npm installation (bypassing broken `oc skill` CLI)
+**플랫폼**: Linux (tom26 서버)
+**방법**: 직접 npm 설치 (고장난 `oc skill` CLI 우회)
 
 ```bash
-# Installation Steps (INSTALL_PLAYWRIGHT_SKILL_LINUX.md)
+# 설치 단계 (INSTALL_PLAYWRIGHT_SKILL_LINUX.md)
 cd ~/.openclaw/workspace
 npm init -y
 npm install playwright
 npx playwright install
-sudo npx playwright install-deps  # System dependencies
+sudo npx playwright install-deps  # 시스템 의존성
 ```
 
-**Verification**:
+**확인**:
 ```bash
 node -e "const {chromium} = require('playwright'); (async()=>{const b=await chromium.launch(); await b.close();})()"
 ```
 
 ---
 
-## Batch Collector Script Evolution
+## 배치 수집 스크립트 진화 과정
 
-### v1-v3: Initial Prototypes
-- Basic Red Hat scraping (2 pages only)
-- Oracle dynamic website attempts (failed due to APEX timeouts)
+### v1-v3: 초기 프로토타입
+- 기본적인 Red Hat 스크래핑 (2페이지만)
+- Oracle 동적 웹사이트 시도 (APEX 타임아웃으로 실패)
 
-### v4: Oracle Debugging Phase
-- Created `debug_oracle.js` to inspect Oracle security page
-- Discovered main page links to version-specific APEX applications
-- Dynamic scraping proved unreliable (networkidle timeouts)
+### v4: Oracle 디버깅 단계
+- `debug_oracle.js`를 생성하여 Oracle 보안 페이지 검사
+- 메인 페이지가 버전별 APEX 애플리케이션으로 링크됨을 발견
+- 동적 스크래핑은 신뢰성이 떨어짐(networkidle 타임아웃)을 확인
 
-### v5: Oracle Mailing List Pivot ✅
+### v5: Oracle 메일링 리스트 전환 ✅
 
-**Strategic Decision**: Switched to "Trusted Feed" approach for Oracle.
+**전략적 결정**: Oracle에 대해 "신뢰할 수 있는 피드(Trusted Feed)" 접근 방식으로 전환.
 
-**Source**: Official Oracle Linux Errata Mailing List Archive
+**소스**: 공식 Oracle Linux Errata 메일링 리스트 아카이브
 - URL: `https://oss.oracle.com/pipermail/el-errata/`
-- Structure: Monthly archives (`2025-November/date.html`, etc.)
-- Filtering: Subject lines containing "Unbreakable Enterprise Kernel" (UEK)
+- 구조: 월별 아카이브 (`2025-November/date.html` 등)
+- 필터링: 제목에 "Unbreakable Enterprise Kernel" (UEK) 포함 여부
 
-**Implementation**:
+**구현**:
 ```javascript
-// Iterate through target months
+// 대상 월별 반복
 for (const month of ['2025-November', '2025-December', '2026-January', '2026-February']) {
     const url = `${baseUrl}/${month}/date.html`;
-    // Parse <li><a> elements, filter for "UEK" in subject
-    // Extract ELSA-YYYY-NNNN IDs
+    // <li><a> 요소 파싱, "UEK" 필터링
+    // ELSA-YYYY-NNNN ID 추출
 }
 ```
 
-**Result**: **64 UEK advisories** collected
+**결과**: **64개 UEK 권고** 수집 성공
 
-**Advantages**:
-- Official announcement channel (high reliability)
-- Static HTML (no JavaScript rendering issues)
-- Immune to website redesigns
+**장점**:
+- 공식 공지 채널 (높은 신뢰성)
+- 정적 HTML (자바스크립트 렌더링 이슈 없음)
+- 웹사이트 리디자인에 영향을 받지 않음
 
-### v6: Red Hat Coverage Expansion ✅
+### v6: Red Hat 커버리지 확장 ✅
 
-**Problem Identified**: User noticed 47 Red Hat advisories for 3 months was suspiciously low.
+**문제 식별**: 사용자가 3개월간 Red Hat 권고가 47개뿐인 점을 의심스럽게 여김.
 
-**Root Cause**: Script hardcoded to only 2 pages (200 advisories max), but most were from Feb 2026 only.
+**원인**: 스크립트가 2페이지(최대 200개)까지만 긁도록 하드코딩되어 있었으며, 대부분 2026년 2월 데이터였음.
 
-**Solution**: Date-Smart Pagination
-- Increased from 2 → **10 pages** (1,000 advisory capacity)
-- Implemented **early termination**: Stop when encountering advisories before `2025-11-01`
-- Filtering logic: Only save advisories within target date range
+**해결책**: 날짜 기반 스마트 페이지네이션
+- 2페이지 → **10페이지** (1,000개 수용 가능)로 증설
+- **조기 종료(Early Termination)** 구현: `2025-11-01` 이전 권고를 만나면 중단
+- 필터링 로직: 대상 기간 내의 권고만 저장
 
-**Implementation**:
+**구현**:
 ```javascript
 const MAX_REDHAT_PAGES = 10;
 const TARGET_START_DATE = new Date('2025-11-01');
 
 for (let i = 1; i <= MAX_REDHAT_PAGES && shouldContinue; i++) {
-    // ... fetch page ...
+    // ... 페이지 수집 ...
     const oldestDate = parseDate(pageAdvisories[pageAdvisories.length - 1].dateStr);
     if (oldestDate < TARGET_START_DATE) {
-        console.log(`Stopping pagination - reached ${TARGET_START_DATE}`);
+        console.log(`페이지네이션 중단 - ${TARGET_START_DATE} 도달`);
         shouldContinue = false;
     }
 }
 ```
 
-**Result**: **255 Red Hat advisories** (5x increase from 47)
+**결과**: **255개 Red Hat 권고** (47개에서 5배 증가)
 
-### v7: Ubuntu RSS Addition ⚠️
+### v7: Ubuntu RSS 추가 ⚠️
 
-**Initial Approach**: Ubuntu provides official RSS feed at `https://ubuntu.com/security/notices/rss.xml`
+**초기 접근**: Ubuntu 공식 RSS 피드 (`https://ubuntu.com/security/notices/rss.xml`) 활용
 
-**Implementation**:
-- Fetched RSS XML, extracted `<item>` elements
-- Filtered by LTS version mentions (22.04, 24.04)
-- Applied date range filter (Nov 2025 - Feb 2026)
+**구현**:
+- RSS XML fetch, `<item>` 요소 추출
+- LTS 버전 언급(22.04, 24.04) 필터링
+- 날짜 범위 필터링 (2025.11 - 2026.02)
 
-**Result**: **8 Ubuntu advisories** (suspiciously low)
+**결과**: **8개 Ubuntu 권고** (지나치게 적음)
 
-**Discovery**: RSS feed only contains **latest 10 items total**, not the full 3-month archive.
+**발견**: RSS 피드는 전체 3개월 아카이브가 아니라 **최신 10~20개 항목**만 제공함.
 
-### v8: Ubuntu Web Scraping (Current) 🔄
+### v8: Ubuntu 웹 스크래핑 (현재) 🔄
 
-**Problem**: User correctly identified 8 Ubuntu advisories for 3 months was too low.
+**문제**: 3개월간 8개는 말이 안 됨.
 
-**Investigation**:
-- Ubuntu Security Notices site: `https://ubuntu.com/security/notices`
-- Total advisories available: **10,263**
-- Pagination: `?offset=0` (page 1), `?offset=10` (page 2), etc.
+**조사**:
+- Ubuntu Security Notices 사이트: `https://ubuntu.com/security/notices`
+- 전체 권고 수: **10,263개**
+- 페이지네이션: `?offset=0` (1페이지), `?offset=10` (2페이지)...
 
-**Solution**: Pagination-Based Web Scraping (similar to Red Hat)
+**해결책**: 페이지네이션 기반 웹 스크래핑 (Red Hat과 유사)
 
-**Implementation**:
+**구현**:
 ```javascript
-const MAX_UBUNTU_PAGES = 30; // ~300 USN entries
+const MAX_UBUNTU_PAGES = 30; // 약 300 USN 항목
 
 for (let i = 0; i < MAX_UBUNTU_PAGES && shouldContinue; i++) {
     const offset = i * 10;
     const url = `${baseUrl}?offset=${offset}`;
     
-    // Extract USN-YYYY-NNNN links
-    // Check oldest date on page for early termination
-    // Fetch full details for each USN
-    // Filter by LTS version (22.04, 24.04) in content
-    // Filter by publication date (Nov 2025 - Feb 2026)
+    // USN-YYYY-NNNN 링크 추출
+    // 각 USN의 상세 페이지 fetch
+    // 내용 중 LTS 버전(22.04, 24.04) 포함 여부 필터링
+    // 게시일(2025.11 - 2026.02) 필터링
 }
 ```
 
-**Status**: Currently executing on tom26 (v8 script in progress)
-
-**Expected Result**: Significantly more than 8 advisories (likely 50-100+ LTS advisories)
+**결과**: 실행 중 (예상: 50~100개 이상의 LTS 권고)
 
 ---
 
-## Collection Results (Current State)
+## 수집 결과 (현재 상태)
 
-### Confirmed Results (v7)
-- **Red Hat**: 255 advisories (Nov 2025 - Feb 2026)
-- **Oracle UEK**: 64 advisories (Mailing List)
-- **Ubuntu LTS**: 8 advisories (RSS - acknowledged as incomplete)
-
-### In Progress (v8)
-- **Ubuntu LTS**: Web scraping execution ongoing (expected: 50-100+ advisories)
-
-### Final Strategy Summary
-
-| Vendor | Method | Source | Reliability | Notes |
-|--------|--------|--------|-------------|-------|
-| **Red Hat** | Web Scraping | `access.redhat.com/errata-search` | High | Pagination with date-based early termination |
-| **Oracle** | Mailing List Parsing | `oss.oracle.com/pipermail/el-errata` | Very High | Official announcement channel (trusted feed) |
-| **Ubuntu** | Web Scraping | `ubuntu.com/security/notices` | High | Pagination + LTS filtering (replaced RSS) |
+### 확정된 결과 (v7 기준)
+- **Red Hat**: 255개 권고 (2025.11 - 2026.02)
+- **Oracle UEK**: 64개 권고 (메일링 리스트)
+- **Ubuntu LTS**: 8개 권고 (RSS - 불완전함 확인됨)
 
 ---
 
-## Key Learnings & Design Decisions
+## 주요 교훈 및 설계 결정
 
-### 1. Trusted Feeds > Dynamic Scraping
+### 1. 신뢰할 수 있는 피드 > 동적 스크래핑
 
-**Oracle Case Study**: Instead of scraping complex APEX applications, we parse the official mailing list archive. This is:
-- More reliable (static HTML)
-- Officially maintained
-- Immune to UI changes
+**Oracle 사례**: 복잡한 APEX 애플리케이션을 스크래핑하는 대신 공식 메일링 리스트 아카이브를 파싱했습니다.
+- 더 신뢰할 수 있음 (정적 HTML)
+- 공식적으로 관리됨
+- UI 변경에 강함
 
-### 2. Date-Based Early Termination
+### 2. 날짜 기반 조기 종료 (Early Termination)
 
-**Red Hat & Ubuntu**: Instead of blindly scraping all pages, we:
-- Sort by publication date (descending)
-- Stop when encountering advisories before target start date
-- Reduces unnecessary processing and API load
+**Red Hat & Ubuntu**: 무작정 모든 페이지를 긁는 대신:
+- 게시일 내림차순 정렬 활용
+- 목표 시작일 이전의 권고를 만나면 즉시 중단
+- 불필요한 처리 및 API 부하 감소
 
-### 3. LTS Version Filtering
+### 3. RSS 피드는 불완전하다
 
-**Ubuntu Strategy**: 
-- Collect broadly from pagination
-- Filter for LTS versions (22.04, 24.04) in full advisory text
-- Ensures we don't miss advisories that affect multiple versions
-
-### 4. RSS Feeds Are Incomplete
-
-**Lesson Learned**: RSS feeds often only contain recent items (10-20), not full archives. Always verify feed depth before relying on it for historical data.
+**교훈**: RSS 피드는 전체 아카이브가 아니라 최신 항목만 제공하는 경우가 많습니다. 과거 데이터를 수집할 때는 RSS에 의존하기 전 피드의 깊이를 반드시 확인해야 합니다.
 
 ---
 
-## File Artifacts
+## 파일 산출물
 
-### Scripts
-- `batch_collector.js` (v8): Unified collection for all 3 vendors
-- `debug_oracle.js`: Oracle page debugging utility
-- `probe_redhat_pages.js`: Red Hat pagination analyzer
-- `probe_ubuntu_page.js`: Ubuntu page structure analyzer
-
-### Documentation
-- `INSTALL_PLAYWRIGHT_SKILL_LINUX.md`: Playwright setup guide for Linux
-- `apply_openclaw_fix_v7.sh`: OpenClaw Gateway port shift fix
-
-### Data
-- `batch_data/`: Directory containing collected JSON files (RHSA-*.json, ELSA-*.json, USN-*.json)
-- `batch_data_v6.tar.gz`: Red Hat + Oracle collection (279 files)
-- `batch_data_v7_all_vendors.tar.gz`: Red Hat + Oracle + Ubuntu RSS (287 files)
-- `batch_data_v8_all_vendors.tar.gz`: (In progress) Red Hat + Oracle + Ubuntu Web Scraping
+- `batch_collector.js` (v8): 3개 벤더 통합 수집기
+- `patch_preprocessing.py`: 데이터 전처리 및 필터링
+- `GUIDE.md`: 자동화 가이드 (심층 분석)
+- `README.md`: 프로젝트 개요 및 빠른 시작
 
 ---
 
-## Next Steps
+## 변경 이력 (Revision History)
 
-1. **Complete v8 Execution**: Wait for Ubuntu web scraping to finish
-2. **Verify Ubuntu Count**: Confirm significantly higher than 8 advisories
-3. **Data Analysis**: Filter collected advisories for "Critical/Important" severity
-4. **Final Report**: Generate comprehensive patch recommendation list for Nov 2025 - Feb 2026
-
----
-
-## Technical Stack
-
-- **Runtime**: Node.js v22
-- **Automation**: Playwright (headless Chromium)
-- **Platform**: Linux (tom26 server)
-- **Concurrency**: 3 parallel browsers (configurable)
-- **Output**: JSON files (one per advisory)
-
----
-
-## Revision History
-
-- **2026-02-13 06:00** - Initial log (v1-v5 documentation)
-- **2026-02-13 15:30** - Added v6 (Red Hat expansion) and v7 (Ubuntu RSS)
-- **2026-02-13 15:56** - Added v8 (Ubuntu web scraping pivot), finalized strategy table
-- **2026-02-19 11:25** - **Iteration 4 (Final)**: Implemented `patch_preprocessing.py` for Strict Pruning & Aggregation. Updated workflow to separate "Mechanical Prep" from "Real AI Review".
+- **2026-02-13 06:00** - 초기 로그 (v1-v5 문서화)
+- **2026-02-13 15:30** - v6 (Red Hat 확장) 및 v7 (Ubuntu RSS) 추가
+- **2026-02-13 15:56** - v8 (Ubuntu 웹 스크래핑 전환) 추가, 전략 테이블 확정
+- **2026-02-19 11:25** - **Iteration 4 (Final)**: `patch_preprocessing.py` 구현 (엄격한 가지치기 및 집계). "기계적 준비"와 "실제 AI 리뷰" 워크플로우 분리.
+- **2026-02-19 17:00** - **Iteration 5 (Final Polish)**:
+    - `patch_preprocessing.py` 고도화: Red Hat `Affected Products` 파싱 추가로 RHEL 버전 및 OCP 전용 권고 정확 식별.
+    - `SKILL_PatchReviewBoard.md` 작성: AI 에이전트를 위한 상세 리뷰 가이드라인(포함/제외 기준, 한/영 설명 생성 등) 정립.
+    - 최종 산출물 검증: `patch_review_final_report.csv` (16건의 핵심 패치, 규격 완벽 준수) 생성 확인.
