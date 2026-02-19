@@ -45,6 +45,11 @@ SYSTEM_CORE_COMPONENTS = [
     "docker", "podman", "runc", "containerd", "kubernetes", "kubelet"
 ]
 
+# Ubuntu LTS versions whose Standard Security Maintenance has EXPIRED (as of 2026-02-19).
+# Reference: https://ubuntu.com/about/release-cycle
+# 14.04 LTS: expired 2019-04 | 16.04 LTS: expired 2021-04 | 18.04 LTS: expired 2023-04 | 20.04 LTS: expired 2025-05
+UBUNTU_EOL_LTS_VERSIONS = {"14.04 LTS", "16.04 LTS", "18.04 LTS", "20.04 LTS"}
+
 EXCLUDED_PACKAGES_EXPLICIT = [
     "firefox", "thunderbird", "libreoffice", "evolution", 
     "gimp", "inkscape", "cups", "avahi", "bluez", "pulseaudio", "pipewire",
@@ -96,6 +101,103 @@ def extract_oracle_version(text):
     
     return ""
 
+def extract_redhat_date(text):
+    """Extracts 'Issued: YYYY-MM-DD' from Red Hat full text"""
+    # Try English "Issued: YYYY-MM-DD"
+    match = re.search(r"Issued:\s*(\d{4}-\d{2}-\d{2})", text)
+    if match: return match.group(1)
+
+    # Try Japanese "発行日: YYYY-MM-DD"
+    match = re.search(r"発行日:\s*(\d{4}-\d{2}-\d{2})", text)
+    if match: return match.group(1)
+    
+    return ""
+
+def extract_redhat_dist_version(full_text):
+    """Extracts RHEL major version numbers from Red Hat advisory text.
+    
+    Strategy:
+    1. Parse 'Affected Products' section for lines like:
+       'Red Hat Enterprise Linux for x86_64 - Update Services for SAP Solutions 9.2 x86_64'
+       -> extracts '9'
+    2. Fallback: scan full_text for 'Red Hat Enterprise Linux X' patterns.
+    
+    Returns a sorted list of unique major version strings e.g. ['8', '9'].
+    Returns ['Unknown'] if nothing is found.
+    """
+    versions = set()
+
+    # Strategy 1: Parse 'Affected Products' section
+    # Look for section header and extract lines until next section
+    affected_match = re.search(
+        r"Affected Products[:\s]*(.+?)(?=\n(?:[A-Z][A-Za-z ]+:|Fixes|References|Packages|$))",
+        full_text, re.DOTALL | re.IGNORECASE
+    )
+    if affected_match:
+        affected_block = affected_match.group(1)
+        # Match 'Red Hat Enterprise Linux ... X.Y ...' or 'Red Hat Enterprise Linux X'
+        for m in re.finditer(
+            r"Red Hat Enterprise Linux[^\n]*?\b(\d+)(?:\.\d+)?\b",
+            affected_block, re.IGNORECASE
+        ):
+            versions.add(m.group(1))
+
+    # Strategy 2: Fallback — scan full text
+    if not versions:
+        for m in re.finditer(r"Red Hat Enterprise Linux (\d+)", full_text, re.IGNORECASE):
+            versions.add(m.group(1))
+
+    if versions:
+        return sorted(versions)
+    return ["Unknown"]
+
+def extract_redhat_content(text):
+    """Clean Red Hat boilerplate and extract Description/Topic/Fixes"""
+    # 1. Remove Top Boilerplate (Cookie Warning & Nav)
+    # The text often starts with <div id="noJavaScript"... or "Skip to..."
+    # We look for the Advisory Header "RHSA-..." or "RHBA-..."
+    
+    header_match = re.search(r"(RH[SBE]A-\d{4}:\d+ - Security Advisory|RH[SBE]A-\d{4}:\d+ - Bug Fix Advisory)", text)
+    start_idx = 0
+    if header_match:
+        start_idx = header_match.start()
+        
+    cleaned_text = text[start_idx:]
+    
+    # 2. Extract Key Sections (Description, Topic, Security Fixes)
+    # We want to capture from "Description" or "Topic" until "Solution" or "References"
+    
+    content = ""
+    
+    # Try finding sections
+    # Note: Case sensitive or insensitive depending on consistency. The JSON suggests "Description" and "Topic" are Capitalized.
+    
+    # Priority 1: Description
+    desc_match = re.search(r"\bDescription\b", cleaned_text)
+    topic_match = re.search(r"\bTopic\b", cleaned_text)
+    
+    extraction_start = -1
+    if desc_match:
+        extraction_start = desc_match.start()
+    elif topic_match:
+        extraction_start = topic_match.start()
+        
+    if extraction_start != -1:
+        # Find end marker
+        sol_match = re.search(r"\bSolution\b", cleaned_text[extraction_start:])
+        ref_match = re.search(r"\bReferences\b", cleaned_text[extraction_start:])
+        
+        extraction_end = len(cleaned_text)
+        if sol_match:
+            extraction_end = extraction_start + sol_match.start()
+        elif ref_match:
+            extraction_end = extraction_start + ref_match.start()
+            
+        return cleaned_text[extraction_start:extraction_end].strip()
+        
+    # Fallback: Just return cleaned text (post-header) truncated
+    return cleaned_text[:1000]
+
 def extract_diff_content(text, vendor):
     """Extracts relevant 'diff' content (changes) from full text"""
     lower_text = text.lower()
@@ -118,6 +220,9 @@ def extract_diff_content(text, vendor):
             if end_idx != -1:
                 return text[idx+len(marker):end_idx].strip()
             return text[idx+len(marker):].strip()
+
+    elif vendor == "Red Hat":
+        return extract_redhat_content(text)
             
     # Default: Return cleanedsummary/synopsis
     return text[:500] + "..." if len(text) > 500 else text
@@ -138,8 +243,8 @@ def get_component_name(vendor, title, summary, full_text):
             ver_suffix = f"-{ol_ver}" if ol_ver else ""
             
             return f"{comp}{kern_series}{ver_suffix}"
-        return "other" 
-
+        return "other"
+    
     # 2. Ubuntu/RHEL Heuristics
     for core in SYSTEM_CORE_COMPONENTS:
         if re.search(fr'\b{re.escape(core)}\b', text):
@@ -155,8 +260,22 @@ def get_component_name(vendor, title, summary, full_text):
         
     return "other"
 
-def extract_specific_version(text, component):
+def extract_specific_version(text, component, patch_id=None):
     """Extracts exact version number if possible (e.g. 5.4.17-...)"""
+    # User Overrides & Manual Lookups
+    overrides = {
+        "RHSA-2026:1815": "openssh-8.7p1-30.el9_2.9",
+        "RHSA-2026:2594": "kernel-5.14.0-427.110.1.el9_4", # Src RPM
+        "RHSA-2026:2486": "fence-agents-4.2.1-89.el8_6.21", 
+        "RHSA-2026:1733": "openssl-3.0.1-46.el9_0.7", # Minimum version
+        "RHSA-2026:2484": "pcs-0.10.11", # Advisory updates 'pcs', specific version varies, using generic base
+        "RHSA-2026:2572": "rhacm-2.14-images", # Container images, no single RPM
+        "RHSA-2026:2520": "toolbox-0.0.99.5.1-2.el9_4"
+    }
+    
+    if patch_id in overrides:
+        return overrides[patch_id]
+
     # Heuristic for kernel versions
     if "kernel" in component:
         m = re.search(r'(\d+\.\d+\.\d+-\d+(\.\d+)*(\.el\d+uek)?)', text)
@@ -168,7 +287,7 @@ def is_system_critical(vendor, component, text):
     # Rule 1: Oracle UEK Only
     if vendor == "Oracle":
         return "kernel-uek" in comp
-
+    
     # Rule 2: Strict Whitelist (RHEL/Ubuntu)
     for bad in EXCLUDED_PACKAGES_EXPLICIT:
         if bad == comp or (f"{bad}-" in comp): return False
@@ -206,24 +325,111 @@ def preprocess_patches():
             summary = data.get('synopsis', '')
             full_text = data.get('full_text', '') 
             
+            # Content Cleaning (Red Hat)
+            if vendor == "Red Hat":
+                rh_date = extract_redhat_date(full_text)
+                full_text = extract_redhat_content(full_text)
+                if rh_date: date_str = rh_date
+                if not summary:
+                    summary = title # Fallback
+                
+            # --- EXCLUSION FILTERS ---
+            # 1. Garbage Data (Empty Content or Known Bad ID)
+            if (len(full_text) < 50 and vendor == "Red Hat") or patch_id == "RHSA-2026:2664":
+                continue
+            
+            # Exclude OpenShift product advisories (not RHEL core packages).
+            # Check title/synopsis AND full_text to catch cases where OCP advisories
+            # do not mention 'OpenShift' in title but affect only OCP products.
+            if "openshift" in title.lower() or "openshift" in summary.lower():
+                continue
+            # Additional check: if 'Affected Products' only lists OCP (no RHEL line)
+            if vendor == "Red Hat":
+                affected_match = re.search(
+                    r"Affected Products[:\s]*(.+?)(?=\n[A-Z]|$)", full_text, re.DOTALL | re.IGNORECASE
+                )
+                if affected_match:
+                    ap_block = affected_match.group(1)
+                    has_rhel = bool(re.search(r"Red Hat Enterprise Linux", ap_block, re.IGNORECASE))
+                    has_ocp_only = bool(re.search(r"OpenShift Container Platform", ap_block, re.IGNORECASE))
+                    if has_ocp_only and not has_rhel:
+                        continue  # OCP-only advisory — skip
+
+            # 2. User Blacklist (SAP, kernel-rt)
+            if "SAP" in title or "Update Services for SAP" in summary:
+                continue
+            if "real time" in title.lower() or "kernel-rt" in title.lower() or "kernel-rt" in summary.lower():
+                continue
+            
             component = get_component_name(vendor, title, summary, full_text)
-            specific_ver = extract_specific_version(full_text, component)
+            specific_ver = extract_specific_version(full_text, component, patch_id)
             
             # Extract diff content for history/summary
             diff_content = extract_diff_content(full_text, vendor)
             if not diff_content: diff_content = summary
 
-            raw_list.append({
-                'id': patch_id,
-                'vendor': vendor,
-                'date': date_str,
-                'component': component,
-                'specific_version': specific_ver,
-                'summary': summary,
-                'diff_content': diff_content, # Normalized content
-                'full_text': full_text + " " + title,
-                'ref_url': data.get('url', '')
-            })
+            # --- DIST VERSION EXTRACTION & SPLITTING ---
+            dist_versions = []
+            if vendor == "Ubuntu":
+                # Find all "XX.XX LTS" patterns and filter out EOL versions
+                lts_matches = re.findall(r"(\d{2}\.\d{2} LTS)", full_text + " " + title)
+                if lts_matches:
+                    active_lts = [v for v in sorted(set(lts_matches)) if v not in UBUNTU_EOL_LTS_VERSIONS]
+                    dist_versions = active_lts
+                # Non-LTS versions (25.10, etc.) are intentionally NOT included (not supported)
+            
+            elif vendor == "Oracle":
+                # Extracted in get_component_name, but let's formalize here
+                ol_ver = extract_oracle_version(full_text + " " + title) # e.g. "ol9"
+                if ol_ver:
+                    dist_versions = [ol_ver.replace("ol", "")] # "9"
+            
+            elif vendor == "Red Hat":
+                # Use dedicated parser that checks 'Affected Products' section first
+                dist_versions = extract_redhat_dist_version(full_text)
+            
+            if not dist_versions:
+                dist_versions = ["Unknown"]
+
+            # Log if we are splitting
+            if len(dist_versions) > 1:
+                print(f"Splitting {patch_id} into versions: {dist_versions}")
+
+            for dist_ver in dist_versions:
+                # Create a specific ID for this split if multiple
+                unique_id = patch_id
+                if len(dist_versions) > 1:
+                    unique_id = f"{patch_id}-{dist_ver.replace(' ','_')}"
+                
+                # Re-extract component/version specific to this dist_ver context if possible
+                # (For now, we use the global extraction but hint the Agent)
+                
+                # Attempt to extract detection specific to this Dist Version if provided
+                target_specific_ver = specific_ver
+                
+                if vendor == "Ubuntu":
+                   # Try to find the table row: "24.04 LTS noble runc – 1.3.3-..."
+                   # Regex look for: {dist_ver} ... {component} – {version}
+                   # escape dots in dist_ver
+                   safe_ver = re.escape(dist_ver)
+                   # Matches line like: "24.04 LTS noble runc – 1.3.3..."
+                   row_match = re.search(fr"{safe_ver}.*?{component}\s+[–-]\s+([^\s]+)", full_text, re.IGNORECASE)
+                   if row_match:
+                       target_specific_ver = row_match.group(1)
+
+                raw_list.append({
+                    'id': unique_id,
+                    'original_id': patch_id,
+                    'vendor': vendor,
+                    'dist_version': dist_ver,
+                    'date': date_str,
+                    'component': component,
+                    'specific_version': target_specific_ver,
+                    'summary': summary,
+                    'diff_content': diff_content, 
+                    'full_text': full_text + " " + title,
+                    'ref_url': data.get('url', '')
+                })
 
         except Exception as e:
             print(f"Error reading {json_path}: {e}")

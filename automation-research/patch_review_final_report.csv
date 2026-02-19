@@ -1,0 +1,8 @@
+﻿Category,Release Date,Vendor,Model / Version,Detailed Version,Patch Name,Patch Target,Reference Site,Patch Description,한글 설명
+OS,2026-Febru,Oracle,Oracle Linux,ELSA-2026-50100,kernel,kernel,https://oss.oracle.com/pipermail/el-errata/2026-February/019719.html,"System Hang/Crash, Data Loss/Corruption, Critical Performance, Security (Critical). (Total patches included: 23)","시스템 멈춤/충돌 해결, 데이터 손실 방지, 성능 저하 문제 수정, 중요 보안 취약점 패치. (누적 패치 포함: 23건)"
+OS,2026-01-08,Ubuntu,24.04,USN-7047-1,libvirt,libvirt,https://ubuntu.com/security/notices/USN-7047-1,System Hang/Crash,시스템 멈춤/충돌 해결.
+OS,2026-02-12,Ubuntu,22.04,USN-8034-1,kernel,kernel,https://ubuntu.com/security/notices/USN-8034-1,System Hang/Crash. (Total patches included: 76),시스템 멈춤/충돌 해결. (누적 패치 포함: 76건)
+OS,2025-11-24,Ubuntu,24.04,USN-7851-2,runc,runc,https://ubuntu.com/security/notices/USN-7851-2,System Hang/Crash. (Total patches included: 2),시스템 멈춤/충돌 해결. (누적 패치 포함: 2건)
+OS,2025-11-10,Ubuntu,24.04,USN-7866-1,microcode,microcode,https://ubuntu.com/security/notices/USN-7866-1,"System Hang/Crash, Security (Critical)","시스템 멈춤/충돌 해결, 중요 보안 취약점 패치."
+OS,2026-01-27,Ubuntu,24.04,USN-7980-1,openssl,openssl,https://ubuntu.com/security/notices/USN-7980-1,"System Hang/Crash, Data Loss/Corruption, Security (Critical). (Total patches included: 2)","시스템 멈춤/충돌 해결, 데이터 손실 방지, 중요 보안 취약점 패치. (누적 패치 포함: 2건)"
+OS,2026-02-03,Ubuntu,24.04,USN-8005-1,other,other,https://ubuntu.com/security/notices/USN-8005-1,System Hang/Crash. (Total patches included: 3),시스템 멈춤/충돌 해결. (누적 패치 포함: 3건)
