@@ -9,83 +9,145 @@ import glob
 # It does NOT perform the review. It performs the mechanical PRE-PROCESSING 
 # (Collection, Pruning, Aggregation) to prepare a clean dataset for the AI Agent (LLM) to review.
 
-# INPUT_FILE = "patch_review_summary.md" # Source data (aggregated from RSS/Web)
 JSON_DIR = r"batch_data"
 OUTPUT_FILE = "patches_for_llm_review.json"
 
 # --- CONFIGURATION: PRUNING RULES ---
-
 # STRICT WHITELIST: ONLY components capable of causing "System Critical" failures.
-# Criteria: Hang/Crash, Data Loss, Failover Failure, Hardware Malfunction, Critical Security.
-
 SYSTEM_CORE_COMPONENTS = [
-    # 1. Kernel & Hardware Interaction (Hang, Crash, Panic risk)
+    # 1. Kernel & Hardware Interaction
     "kernel", "linux-image", "microcode", "linux-firmware", 
-    "shim", "grub", "grub2", "efibootmgr", "mokutil", # Boot critical
+    "shim", "grub", "grub2", "efibootmgr", "mokutil",
     
-    # 2. Storage & Filesystem (Data Loss, Corruption risk)
+    # 2. Storage & Filesystem
     "lvm2", "device-mapper", "multipath-tools", "kpartx", 
     "e2fsprogs", "xfsprogs", "dosfstools", "nfs-utils", "cifs-utils",
     "iscsi-initiator-utils", "open-iscsi", "smartmontools",
     
-    # 3. Cluster & High Availability (Failover Failure risk)
+    # 3. Cluster & High Availability
     "pacemaker", "corosync", "pcs", "fence-agents", "resource-agents", "keepalived",
     
-    # 4. Critical Networking (Connectivity Loss risk)
+    # 4. Critical Networking
     "networkmanager", "firewalld", "iptables", "nftables", 
-    "bind", "bind-utils", # DNS failure = Service outage
-    "dhcp", "dhclient",
+    "bind", "bind-utils", "dhcp", "dhclient",
     
-    # 5. Core System Services (System Hang/Unavailability risk)
-    "systemd", "udev", "initscripts", "glibc", # Basic execution env
-    "dbus", "audit", # Security audit / IPC
+    # 5. Core System Services
+    "systemd", "udev", "initscripts", "glibc", 
+    "dbus", "audit",
     
-    # 6. Critical Security (Remote Compromise risk)
+    # 6. Critical Security
     "openssl", "gnutls", "nss", "ca-certificates",
     "openssh", "sshd", "sudo", "pam", "polkit",
     "selinux-policy", "libselinux",
     
-    # 7. Virtualization Infrastructure (Host Crash risk)
+    # 7. Virtualization Infrastructure
     "libvirt", "qemu-kvm", "qemu", "kvm",
     "docker", "podman", "runc", "containerd", "kubernetes", "kubelet"
 ]
 
-# REMOVED from previous broad list:
-# - bash, coreutils, sed, awk, grep: Bugs here rarely cause System Hang/Crash (usually just script error).
-# - python, ruby, perl, php: Runtimes, not system core.
-# - gtk, gnome, X11: GUI not critical for server stability.
-
-# Blacklist (Redundant but safety net)
 EXCLUDED_PACKAGES_EXPLICIT = [
     "firefox", "thunderbird", "libreoffice", "evolution", 
     "gimp", "inkscape", "cups", "avahi", "bluez", "pulseaudio", "pipewire",
     "gnome", "kde", "xorg", "wayland", "mesa", "webkit",
     "python-urllib3", "python-requests", "nodejs", "ruby", "perl", "php",
-    "tar", "gzip", "zip", "unzip", "vim", "nano", "emacs", # Editors/Tools
+    "tar", "gzip", "zip", "unzip", "vim", "nano", "emacs",
     "compiz", "alsa", "sound"
 ]
 
-def get_component_name(vendor, title, summary):
-    text = (title + " " + summary).lower()
+def parse_date(date_str):
+    """Normalizes date string to YYYY-MM-DD or YYYY-MM"""
+    if not date_str: return "Unknown"
+    date_str = date_str.strip()
     
-    # 1. Oracle Special Case: UEK
+    # Format: "2026-February" -> "2026-02"
+    match = re.match(r"(\d{4})-(January|February|March|April|May|June|July|August|September|October|November|December)", date_str, re.IGNORECASE)
+    if match:
+        year = match.group(1)
+        month_name = match.group(2)
+        try:
+            dt = datetime.strptime(month_name, "%B")
+            return f"{year}-{dt.month:02d}"
+        except: pass
+
+    # Format: "Thu, 12 Feb 2026..."
+    try:
+        # Simple extraction of YYYY-MM-DD if ISO format exists
+        if "T" in date_str: return date_str[:10]
+        # Or simplistic parse if standard format failed
+    except: pass
+    
+    return date_str[:10] # Fallback
+
+def extract_oracle_version(text):
+    """Extracts Oracle Linux version (6, 7, 8, 9, 10) from text"""
+    # 1. Explicit "Oracle Linux X"
+    match = re.search(r"Oracle Linux (\d+)", text, re.IGNORECASE)
+    if match: return f"ol{match.group(1)}"
+    
+    # 2. Rpm tags like "el9", "el10", "el8" in filenames
+    match_el = re.search(r"\.el(\d+)uek", text, re.IGNORECASE)
+    if match_el: return f"ol{match_el.group(1)}"
+    
+    # 3. Simple text indicators
+    if "el8" in text.lower(): return "ol8"
+    if "el9" in text.lower(): return "ol9"
+    if "el7" in text.lower(): return "ol7"
+    if "el10" in text.lower() or "ol10" in text.lower(): return "ol10"
+    
+    return ""
+
+def extract_diff_content(text, vendor):
+    """Extracts relevant 'diff' content (changes) from full text"""
+    lower_text = text.lower()
+    
+    if vendor == "Oracle":
+        # Extract "Description of changes" section
+        marker = "description of changes:"
+        idx = lower_text.find(marker)
+        if idx != -1:
+            return text[idx+len(marker):].strip()
+            
+    elif vendor == "Ubuntu":
+        # Extract "Details" section
+        marker = "details"
+        idx = lower_text.find(marker)
+        if idx != -1:
+            # Try to stop at next section (e.g. "Update instructions")
+            end_marker = "update instructions"
+            end_idx = lower_text.find(end_marker)
+            if end_idx != -1:
+                return text[idx+len(marker):end_idx].strip()
+            return text[idx+len(marker):].strip()
+            
+    # Default: Return cleanedsummary/synopsis
+    return text[:500] + "..." if len(text) > 500 else text
+
+def get_component_name(vendor, title, summary, full_text):
+    text = (title + " " + summary + " " + full_text).lower()
+    
+    # 1. Oracle Special Case: UEK + Versioning
     if vendor == "Oracle":
         if "uek" in text or "unbreakable enterprise kernel" in text:
-            return "kernel-uek"
-        return "other" # Will be filtered out
+            comp = "kernel-uek"
+            
+            # Extract Major.Minor version for stream splitting (e.g. 5.15, 6.12)
+            version_match = re.search(r'(\d+\.\d+)\.\d+', text)
+            kern_series = f"-v{version_match.group(1)}" if version_match else ""
+            
+            ol_ver = extract_oracle_version(text)
+            ver_suffix = f"-{ol_ver}" if ol_ver else ""
+            
+            return f"{comp}{kern_series}{ver_suffix}"
+        return "other" 
 
     # 2. Ubuntu/RHEL Heuristics
-    # Check for direct matches in whitelist first
     for core in SYSTEM_CORE_COMPONENTS:
-        # Regex word boundary check for accuracy (avoid 'lib' matching 'glib')
         if re.search(fr'\b{re.escape(core)}\b', text):
             return core
             
-    # 3. Regex fallback <name>-<version>
     m = re.search(r'([a-z0-9]+(-[a-z0-9]+)*)-\d+\.\d+', text)
     if m: 
         name = m.group(1)
-        # Verify if extracted name partial matches core list (so we don't return 'firefox')
         for core in SYSTEM_CORE_COMPONENTS:
             if core == name or (name.startswith(core + "-")):
                 return core
@@ -93,38 +155,30 @@ def get_component_name(vendor, title, summary):
         
     return "other"
 
+def extract_specific_version(text, component):
+    """Extracts exact version number if possible (e.g. 5.4.17-...)"""
+    # Heuristic for kernel versions
+    if "kernel" in component:
+        m = re.search(r'(\d+\.\d+\.\d+-\d+(\.\d+)*(\.el\d+uek)?)', text)
+        if m: return m.group(1)
+    return ""
+
 def is_system_critical(vendor, component, text):
     comp = component.lower()
-    txt = text.lower()
-    
-    # --- RULE 1: ORACLE LINUX IS "UEK ONLY" ---
+    # Rule 1: Oracle UEK Only
     if vendor == "Oracle":
-        if "kernel-uek" in comp: return True
-        # Allow variations like 'Unbreakable Enterprise Kernel'
-        if "unbreakable enterprise kernel" in txt and "kernel" in comp: return True
-        return False
+        return "kernel-uek" in comp
 
-    # --- RULE 2: STRICT WHITELIST (NARROWED) ---
-    
-    # 2.1 First, Check Blacklist for explicit exclusion (Safety Net)
+    # Rule 2: Strict Whitelist (RHEL/Ubuntu)
     for bad in EXCLUDED_PACKAGES_EXPLICIT:
         if bad == comp or (f"{bad}-" in comp): return False
 
-    # 2.2 Verify against Whitelist
     for core in SYSTEM_CORE_COMPONENTS:
-        # Exact match or prefix match (e.g. 'kernel' matches 'kernel-header')
         if core == comp: return True
         if comp.startswith(f"{core}-"): return True
-        
-        # Text based match (fallback if component detection failed but text is clear)
-        if f"package {core}" in txt or f"{core} package" in txt:
-            return True
+        if f"package {core}" in text.lower(): return True
 
-    # 2.3 Special Case: 'Kernel' keyword
-    if "kernel" in comp and "texlive" not in comp: # texlive-kernel is a doc package
-        return True
-        
-    # If not in whitelist -> PRUNE
+    if "kernel" in comp and "texlive" not in comp: return True
     return False
 
 def preprocess_patches():
@@ -145,22 +199,29 @@ def preprocess_patches():
             patch_id = data.get('id', os.path.basename(json_path).replace('.json', ''))
             
             # Normalization
-            date_str = data.get('pubDate', data.get('dateStr', ''))
-            if date_str: date_str = date_str[:10]  # First 10 chars (YYYY-MM-DD or similar) -> simplistic
+            date_raw = data.get('pubDate', data.get('dateStr', ''))
+            date_str = parse_date(date_raw)
             
             title = data.get('title', '')
             summary = data.get('synopsis', '')
-            full_text = data.get('full_text', '') + " " + title + " " + summary
+            full_text = data.get('full_text', '') 
             
-            component = get_component_name(vendor, title, summary)
+            component = get_component_name(vendor, title, summary, full_text)
+            specific_ver = extract_specific_version(full_text, component)
             
+            # Extract diff content for history/summary
+            diff_content = extract_diff_content(full_text, vendor)
+            if not diff_content: diff_content = summary
+
             raw_list.append({
                 'id': patch_id,
                 'vendor': vendor,
                 'date': date_str,
                 'component': component,
+                'specific_version': specific_ver,
                 'summary': summary,
-                'full_text': full_text,
+                'diff_content': diff_content, # Normalized content
+                'full_text': full_text + " " + title,
                 'ref_url': data.get('url', '')
             })
 
@@ -172,31 +233,16 @@ def preprocess_patches():
     # --- Step 2: Pruning ---
     pruned_list = []
     for p in raw_list:
-        text = p['full_text'].lower()
-        
-        # Red Hat Specific Exclusions (Product filtering)
-        if p['vendor'] == "Red Hat":
-            if "update services for sap" in text: continue
-            if "aus" in text or "eus" in text: continue
-            if "kernel-rt" in text: continue
-            if "rhui" in text or "update infrastructure" in text: continue
-            if "openshift" in text or "openstack" in text: continue
-            
-        # Criticality Check (Strict Whitelist + Oracle Rule)
-        if not is_system_critical(p['vendor'], p['component'], text):
-            # print(f"Pruned: {p['vendor']} {p['component']} ({p['id']})")
+        if not is_system_critical(p['vendor'], p['component'], p['full_text']):
             continue
-            
         pruned_list.append(p)
         
     print(f"Pruned Candidates: {len(pruned_list)}")
 
-    # --- Step 4 (Prep): Aggregation ---
-    # Group by Vendor + Component to prepare for LLM Review
+    # --- Step 3: Aggregation ---
     grouped = {}
     for p in pruned_list:
-        # Use simple component name for grouping (e.g. 'kernel-uek' or 'bind')
-        # We need to normalize component names further for aggregation if needed
+        # Group by Vendor + Component (e.g. ('Oracle', 'kernel-uek-ol8'))
         key = (p['vendor'], p['component'])
         if key not in grouped: grouped[key] = []
         grouped[key].append(p)
@@ -214,15 +260,17 @@ def preprocess_patches():
             history_context.append({
                 'id': old['id'],
                 'date': old['date'],
-                'summary': old['summary'][:200] + "..." # Truncate for token efficiency
+                'diff_summary': old['diff_content'][:800] # Provide diff content, truncated
             })
             
         latest['history'] = history_context
-        # Contextual Instructions based on Vendor
-        review_note = ""
-        if latest['vendor'] == "Oracle": review_note = "Only verify this is UEK kernel."
         
-        latest['review_instructions'] = f"Analyze this '{latest['component']}' patch ({review_note}). Check for System Hang, Data Loss, Boot Fail, or Critical Security. Ignore minor bugs. Merge insights from {len(history_context)} previous patches if they are relevant."
+        review_note = ""
+        if latest['vendor'] == "Oracle": 
+            review_note = f"Verify this is UEK kernel ({latest['component']})."
+        
+        latest['review_instructions'] = f"Analyze this '{latest['component']}' patch ({review_note}). Check for System Hang, Data Loss, Boot Fail, or Critical Security. Merge insights from {len(history_context)} previous patches."
+        latest['patch_name_suggestion'] = latest['specific_version'] if latest['specific_version'] else latest['component']
         
         final_candidates.append(latest)
         
