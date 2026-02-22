@@ -80,12 +80,26 @@ Issue ID,Vendor,Dist Version,Component,Version,Date,Criticality,Patch Descriptio
     - Ubuntu: e.g., `"22.04 LTS"`, `"24.04 LTS"`. Oracle: e.g., `"9"`, `"8"`. RHEL: e.g., `"9"`, `"8"`.
     - If a patch covers **multiple versions**, create **one row per version** in the CSV.
     - *Example:* USN-7851-2 → two rows: one for `22.04 LTS`, one for `24.04 LTS`.
+    - **Ubuntu Variant-Specific USNs**: Some USNs only cover a specific kernel variant (FIPS, GCP, NVIDIA, Tegra). Verify the `Releases` section in the advisory `full_text`. **Do NOT** add a 24.04 LTS row for an advisory marked only for 22.04/20.04 LTS. Examples:
+        - USN-8033-3 (FIPS): covers 22.04 LTS only → one row with `Dist Version=22.04 LTS`
+        - USN-8031-1 (GCP): covers 22.04 LTS only → one row
+        - USN-8016-1 (NVIDIA): covers both 22.04 and 24.04 → two rows
 - **Reference**:
     - **MUST** be populated with the `ref_url` (or `url`) field from the source JSON.
     - **Do NOT** leave as "Unknown" if a URL is available in the source data.
 - **Version**:
-    - **MUST** be the specific package version for that particular `Dist Version`.
-    - If `USN` or `RHSA` refers to multiple packages, ensure you pick the one matching the `Dist Version`.
+    - **MUST** be the exact package version string for that particular `Dist Version`, extracted from the advisory's package version table.
+    - **NEVER** use placeholder strings like `"(latest for 22.04)"`, `"1.1.x"`, or `"5.15.0 (linux-hwe)"`.
+    - **Ubuntu version extraction**: Parse the `full_text` of the source JSON and locate the `"Ubuntu Release  Package  Version"` table. Find the row matching the target `Dist Version` and pick the **metapackage** version (e.g., `linux-image-generic → 5.15.0.170.159`), not the binary image version (e.g., `5.15.0-170.180`).
+    - **Ubuntu kernel variant examples** (from `full_text` tables):
+        - `USN-8034-1` 22.04 LTS NVIDIA Tegra: `linux-image-nvidia-tegra → 5.15.0.1052.52`
+        - `USN-8033-3` 22.04 LTS FIPS: `linux-image-fips → 5.15.0.170.97`
+        - `USN-8033-1` 22.04 LTS (standard): `linux-image-generic → 5.15.0.170.159`
+        - `USN-8031-1` 22.04 LTS GCP: `linux-image-gcp → 6.8.0-1047.50~22.04.2`
+        - `USN-8016-1` 22.04 LTS NVIDIA: `linux-image-nvidia-hwe-22.04 → 6.8.0-1045.48~22.04.1`
+        - `USN-8016-1` 24.04 LTS NVIDIA: `linux-image-nvidia → 6.8.0-1045.48`
+    - **runc Issue ID**: The runc container escape fixes are in **USN-7851-2** (NOT USN-8016-1 which is the NVIDIA kernel USN). Versions: `22.04 LTS → 1.3.3-0ubuntu1~22.04.3`, `24.04 LTS → 1.3.3-0ubuntu1~24.04.3`.
+    - If `USN` or `RHSA` refers to multiple packages, ensure you pick the metapackage matching the `Component` and `Dist Version`.
 - **한글 설명 (Korean Description)**:
     - **Do NOT** use generic phrases like "Security update for kernel" or simply list CVE IDs.
     - **MUST** detailed specific critical bugs. Explain **what** functionality is broken and **how** it affects the system.
