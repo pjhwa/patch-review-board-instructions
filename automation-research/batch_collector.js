@@ -4,15 +4,71 @@ const path = require('path');
 
 // --- CONFIGURATION ---
 const OUTPUT_DIR = path.join(__dirname, 'batch_data');
-const TARGET_START_DATE = new Date('2025-11-01');
-const TARGET_END_DATE = new Date('2026-03-01'); // Exclusive
-const ORACLE_TARGET_MONTHS = ['2025-November', '2025-December', '2026-January', '2026-February'];
 const UBUNTU_LTS_VERSIONS = ['22.04', '24.04'];
 const MAX_CONCURRENCY = 3;
 const MAX_REDHAT_PAGES = 10;
-const MAX_UBUNTU_PAGES = 30; // Conservative upper limit (~300 notices to check)
-const MAX_RETRIES = 1;       // Retry once before recording failure
-const RETRY_DELAY_MS = 3000; // 3-second backoff between retries
+const MAX_UBUNTU_PAGES = 30;
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 3000;
+
+// --- DATE RANGE: CLI PARSING ---
+// Usage:
+//   node batch_collector.js --quarter 2026-Q1   → covers quarter + 1-month buffer before
+//   node batch_collector.js --days 90           → last 90 days from today
+//   node batch_collector.js                     → default: last 90 days
+function parseDateRange() {
+    const args = process.argv.slice(2);
+    let startDate, endDate;
+
+    const quarterIdx = args.indexOf('--quarter');
+    const daysIdx = args.indexOf('--days');
+
+    if (quarterIdx !== -1 && args[quarterIdx + 1]) {
+        const qMatch = args[quarterIdx + 1].match(/^(\d{4})-Q([1-4])$/);
+        if (!qMatch) {
+            console.error('Invalid quarter format. Use YYYY-QN (e.g., 2026-Q1)');
+            process.exit(1);
+        }
+        const year = parseInt(qMatch[1]);
+        const quarter = parseInt(qMatch[2]);
+        // Quarter boundaries: Q1=Jan-Mar, Q2=Apr-Jun, Q3=Jul-Sep, Q4=Oct-Dec
+        const qStartMonth = (quarter - 1) * 3; // 0-indexed
+        endDate = new Date(year, qStartMonth + 3, 1); // First day of next quarter (exclusive)
+        // Buffer: start 1 month before quarter for cumulative patch context
+        startDate = new Date(year, qStartMonth - 1, 1);
+        console.log(`[CONFIG] Quarter mode: ${args[quarterIdx + 1]}`);
+    } else {
+        let lookbackDays = 90;
+        if (daysIdx !== -1 && args[daysIdx + 1]) {
+            lookbackDays = parseInt(args[daysIdx + 1]) || 90;
+        }
+        endDate = new Date();
+        endDate.setDate(endDate.getDate() + 1); // Include today
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - lookbackDays);
+        startDate.setDate(1); // Snap to first of month
+        console.log(`[CONFIG] Lookback mode: ${lookbackDays} days`);
+    }
+
+    console.log(`[CONFIG] Date range: ${startDate.toISOString().split('T')[0]} ~ ${endDate.toISOString().split('T')[0]} (exclusive)`);
+    return { startDate, endDate };
+}
+
+function generateOracleMonths(startDate, endDate) {
+    const months = [];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    while (current < endDate) {
+        months.push(`${current.getFullYear()}-${monthNames[current.getMonth()]}`);
+        current.setMonth(current.getMonth() + 1);
+    }
+    return months;
+}
+
+const { startDate: TARGET_START_DATE, endDate: TARGET_END_DATE } = parseDateRange();
+const ORACLE_TARGET_MONTHS = generateOracleMonths(TARGET_START_DATE, TARGET_END_DATE);
+console.log(`[CONFIG] Oracle months: ${ORACLE_TARGET_MONTHS.join(', ')}`);
 
 if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -390,7 +446,7 @@ async function processInBatches(browser, items, asyncWorker) {
 
 // --- MAIN ---
 (async () => {
-    console.log(`=== BATCH COLLECTOR v9 (Timeout Resilience Edition) START ===`);
+    console.log(`=== BATCH COLLECTOR v10 (Dynamic Date Range Edition) START ===`);
     const browser = await chromium.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']

@@ -20,10 +20,19 @@ Ensure the following scripts are available in your workspace (or download them f
 Execute the collection scripts to gather the latest advisory data from vendor sources (RSS/Web).
 
 ```bash
-# Example: Collect data for the current quarter
-node batch_collector.js --quarter "2026-Q1"
+# Option A: Collect by quarter (recommended for scheduled PRB)
+node batch_collector.js --quarter 2026-Q1
+
+# Option B: Collect last N days (default: 90 days from today)
+node batch_collector.js --days 90
+
+# Option C: Default mode (no args = last 90 days)
+node batch_collector.js
 ```
 *Goal: Ensure `batch_data/` is populated with advisory JSON files.*
+
+> [!NOTE]
+> **Date Range Logic:** `--quarter 2026-Q1` collects from **December 1, 2025** (1-month buffer before Q1) through **March 31, 2026**. `--days 90` collects from 90 days before today, snapped to the first of that month.
 
 > [!IMPORTANT]
 > **Timeout Failure Handling (v9+):**
@@ -39,12 +48,15 @@ node batch_collector.js --quarter "2026-Q1"
 > 4. Document any unrecoverable failures in the final report notes.
 
 ### Step 2: Pruning & Aggregation (Automated)
-Run the preprocessing script to filter out non-critical components (e.g., applications like `python-urllib3`) and aggregate multiple patches for the same component.
+Run the preprocessing script to filter out non-critical components and aggregate multiple patches. **Use the same date arguments as Step 1** to ensure consistency.
 
 ```bash
-python patch_preprocessing.py
+# Must match the date range used in Step 1:
+python patch_preprocessing.py --quarter 2026-Q1
+# or: python patch_preprocessing.py --days 90
+# or: python patch_preprocessing.py  (default: 90 days)
 ```
-*Goal: Generate `patches_for_llm_review.json`. This file contains the filtered, consolidated list of candidates.*
+*Goal: Generate `patches_for_llm_review.json`. This file contains the filtered, consolidated list of candidates within the target date range.*
 
 ### Step 3: Impact Analysis (Actual Agent Review)
 **Action Required:** Read the `patches_for_llm_review.json` file. The Agent must **manually analyze** each candidate's `full_text` and `history` to determine if it meets the **Critical System Impact** criteria. **Do not rely on simple scripts for this step.**
@@ -133,11 +145,12 @@ Issue ID,Vendor,Dist Version,Component,Version,Date,Criticality,Patch Descriptio
 **User Request:** "Run the PRB for Q1 2026."
 
 **Agent Actions:**
-1.  Run `node batch_collector.js ...`
-2.  Run `python patch_preprocessing.py`
+1.  Run `node batch_collector.js --quarter 2026-Q1`
+2.  Run `python patch_preprocessing.py --quarter 2026-Q1`
 3.  Read `patches_for_llm_review.json`.
-4.  *Thinking Process*:
+4.  Check `batch_data/collection_failures.json` if any advisories failed.
+5.  *Thinking Process*:
     *   "Candidate: kernel-uek... Impacts: Data Loss. -> **INCLUDE**."
     *   "Candidate: python-libs... Impacts: Minor fix. -> **EXCLUDE**."
-5.  Create `patch_review_final_report.csv` with the approved list.
-6.  Notify User: "Report generated at [path]."
+6.  Create `patch_review_final_report.csv` with the approved list.
+7.  Notify User: "Report generated at [path]."
