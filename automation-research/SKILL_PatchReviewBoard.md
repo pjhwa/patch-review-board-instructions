@@ -23,7 +23,20 @@ Execute the collection scripts to gather the latest advisory data from vendor so
 # Example: Collect data for the current quarter
 node batch_collector.js --quarter "2026-Q1"
 ```
-*Goal: Ensure `patch_review_summary.md` and `extracted_data/` are populated.*
+*Goal: Ensure `batch_data/` is populated with advisory JSON files.*
+
+> [!IMPORTANT]
+> **Timeout Failure Handling (v9+):**
+> The collector automatically retries failed advisories once with a 3-second backoff. If an advisory still fails (e.g., website timeout), it is **skipped** and recorded in `batch_data/collection_failures.json`.
+>
+> **After collection completes:**
+> 1. Check the console output for `[REPORT] ⚠ N advisory(ies) failed to collect`.
+> 2. If failures exist, open `batch_data/collection_failures.json` and review each entry.
+> 3. For each failed advisory, either:
+>    - Re-run the collector later (transient network issue), or
+>    - Manually visit the `url` field and save the advisory data, or
+>    - Mark as "manually reviewed — not critical" and proceed.
+> 4. Document any unrecoverable failures in the final report notes.
 
 ### Step 2: Pruning & Aggregation (Automated)
 Run the preprocessing script to filter out non-critical components (e.g., applications like `python-urllib3`) and aggregate multiple patches for the same component.

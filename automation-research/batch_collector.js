@@ -11,9 +11,42 @@ const UBUNTU_LTS_VERSIONS = ['22.04', '24.04'];
 const MAX_CONCURRENCY = 3;
 const MAX_REDHAT_PAGES = 10;
 const MAX_UBUNTU_PAGES = 30; // Conservative upper limit (~300 notices to check)
+const MAX_RETRIES = 1;       // Retry once before recording failure
+const RETRY_DELAY_MS = 3000; // 3-second backoff between retries
 
 if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+// --- FAILURE TRACKING ---
+const failedAdvisories = [];
+
+function recordFailure(vendor, id, url, error) {
+    const entry = {
+        vendor,
+        id: id || 'UNKNOWN',
+        url: url || '',
+        error: error?.message || String(error),
+        timestamp: new Date().toISOString()
+    };
+    failedAdvisories.push(entry);
+    console.error(`[FAILURE] ${vendor} ${entry.id}: ${entry.error}`);
+}
+
+function saveFailureReport() {
+    if (failedAdvisories.length === 0) {
+        console.log('[REPORT] No collection failures.');
+        return;
+    }
+    const filePath = path.join(OUTPUT_DIR, 'collection_failures.json');
+    fs.writeFileSync(filePath, JSON.stringify(failedAdvisories, null, 2));
+    console.log(`\n[REPORT] ⚠ ${failedAdvisories.length} advisory(ies) failed to collect.`);
+    console.log(`[REPORT] Failure details saved to: ${filePath}`);
+    console.log('[REPORT] Please review and manually re-collect if needed.');
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // --- UTILS ---
@@ -113,7 +146,7 @@ async function scrapeRedHat(browser) {
                 });
                 saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Red Hat' });
             } catch (e) {
-                console.error(`[REDHAT] Failed ${adv.id}: ${e.message}`);
+                recordFailure('Red Hat', adv.id, adv.url, e);
             }
         });
 
@@ -186,7 +219,7 @@ async function scrapeOracleMailingList(browser) {
                 });
                 saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Oracle' });
             } catch (e) {
-                console.error(`[ORACLE] Failed ${adv.id}`);
+                recordFailure('Oracle', adv.id, adv.url, e);
             }
         });
 
@@ -304,7 +337,7 @@ async function scrapeUbuntuWeb(browser) {
                 }
 
             } catch (e) {
-                console.error(`[UBUNTU] Failed ${adv.id}: ${e.message}`);
+                recordFailure('Ubuntu', adv.id, adv.url, e);
             }
         });
 
@@ -327,11 +360,27 @@ async function processInBatches(browser, items, asyncWorker) {
     let count = 0;
     for (const chunk of chunks) {
         await Promise.all(chunk.map(async (item) => {
-            const context = await browser.newContext();
-            const page = await context.newPage();
-            await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
-            try { await asyncWorker(page, item); }
-            finally { await page.close(); await context.close(); }
+            let lastError = null;
+            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                const context = await browser.newContext();
+                const page = await context.newPage();
+                await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
+                try {
+                    await asyncWorker(page, item);
+                    lastError = null;
+                    break; // Success — exit retry loop
+                } catch (e) {
+                    lastError = e;
+                    if (attempt < MAX_RETRIES) {
+                        console.warn(`\n[RETRY] ${item.id || 'unknown'}: attempt ${attempt + 1} failed (${e.message}). Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+                        await sleep(RETRY_DELAY_MS);
+                    }
+                } finally {
+                    await page.close();
+                    await context.close();
+                }
+            }
+            // If all retries exhausted, the error is already recorded inside asyncWorker's catch block
         }));
         count += chunk.length;
         process.stdout.write(`\r[PROGRESS] ${count}/${items.length}`);
@@ -341,7 +390,7 @@ async function processInBatches(browser, items, asyncWorker) {
 
 // --- MAIN ---
 (async () => {
-    console.log(`=== BATCH COLLECTOR v8 (Ubuntu Web Scraping Edition) START ===`);
+    console.log(`=== BATCH COLLECTOR v9 (Timeout Resilience Edition) START ===`);
     const browser = await chromium.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -353,6 +402,7 @@ async function processInBatches(browser, items, asyncWorker) {
         await scrapeUbuntuWeb(browser);
     } finally {
         await browser.close();
+        saveFailureReport();
         console.log('=== COLLECTION COMPLETE ===');
     }
 })();
