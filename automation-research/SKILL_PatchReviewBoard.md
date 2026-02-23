@@ -52,9 +52,9 @@ Run the preprocessing script to filter out non-critical components and aggregate
 
 ```bash
 # Must match the date range used in Step 1:
-python patch_preprocessing.py --quarter 2026-Q1
-# or: python patch_preprocessing.py --days 90
-# or: python patch_preprocessing.py  (default: 90 days)
+python3 patch_preprocessing.py --quarter 2026-Q1
+# or: python3 patch_preprocessing.py --days 90
+# or: python3 patch_preprocessing.py  (default: 90 days)
 ```
 *Goal: Generate `patches_for_llm_review.json`. This file contains the filtered, consolidated list of candidates within the target date range.*
 
@@ -146,7 +146,7 @@ Issue ID,Vendor,Dist Version,Component,Version,Date,Criticality,Patch Descriptio
 
 **Agent Actions:**
 1.  Run `node batch_collector.js --quarter 2026-Q1`
-2.  Run `python patch_preprocessing.py --quarter 2026-Q1`
+2.  Run `python3 patch_preprocessing.py --quarter 2026-Q1`
 3.  Read `patches_for_llm_review.json`.
 4.  Check `batch_data/collection_failures.json` if any advisories failed.
 5.  *Thinking Process*:

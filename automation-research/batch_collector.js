@@ -209,7 +209,7 @@ async function scrapeRedHat(browser) {
     } catch (e) {
         console.error('[REDHAT] Critical:', e);
     } finally {
-        await page.close();
+        try { await page.close(); } catch (_) { }
     }
 }
 
@@ -282,7 +282,7 @@ async function scrapeOracleMailingList(browser) {
     } catch (e) {
         console.error('[ORACLE] Error:', e);
     } finally {
-        await page.close();
+        try { await page.close(); } catch (_) { }
     }
 }
 
@@ -414,51 +414,91 @@ async function processInBatches(browser, items, asyncWorker) {
     }
     console.log(`[BATCH] Processing ${items.length} items...`);
     let count = 0;
+    let browserDead = false;
     for (const chunk of chunks) {
+        if (browserDead) {
+            // Record remaining items as failures
+            for (const item of chunk) {
+                recordFailure('BATCH', item.id, item.url, new Error('Browser closed — skipped remaining items'));
+            }
+            count += chunk.length;
+            continue;
+        }
         await Promise.all(chunk.map(async (item) => {
             let lastError = null;
             for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-                const context = await browser.newContext();
-                const page = await context.newPage();
-                await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
+                let context, page;
                 try {
+                    context = await browser.newContext();
+                    page = await context.newPage();
+                } catch (e) {
+                    // Browser is dead — cannot create new context/page
+                    browserDead = true;
+                    recordFailure('BATCH', item.id, item.url, new Error(`Browser closed — cannot create page: ${e.message}`));
+                    return;
+                }
+                try {
+                    await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
                     await asyncWorker(page, item);
                     lastError = null;
-                    break; // Success — exit retry loop
+                    break; // Success
                 } catch (e) {
                     lastError = e;
+                    if (e.message && e.message.includes('has been closed')) {
+                        browserDead = true;
+                        recordFailure('BATCH', item.id, item.url, e);
+                        return; // Don't retry — browser is dead
+                    }
                     if (attempt < MAX_RETRIES) {
                         console.warn(`\n[RETRY] ${item.id || 'unknown'}: attempt ${attempt + 1} failed (${e.message}). Retrying in ${RETRY_DELAY_MS / 1000}s...`);
                         await sleep(RETRY_DELAY_MS);
                     }
                 } finally {
-                    await page.close();
-                    await context.close();
+                    // Safe cleanup — browser may already be dead
+                    try { if (page) await page.close(); } catch (_) { }
+                    try { if (context) await context.close(); } catch (_) { }
                 }
             }
-            // If all retries exhausted, the error is already recorded inside asyncWorker's catch block
         }));
         count += chunk.length;
         process.stdout.write(`\r[PROGRESS] ${count}/${items.length}`);
     }
     console.log('\n[BATCH] Done.');
+    return browserDead;
 }
 
 // --- MAIN ---
 (async () => {
-    console.log(`=== BATCH COLLECTOR v10 (Dynamic Date Range Edition) START ===`);
-    const browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    console.log(`=== BATCH COLLECTOR v11 (Crash-Resilient Edition) START ===`);
 
-    try {
-        await scrapeRedHat(browser);
-        await scrapeOracleMailingList(browser);
-        await scrapeUbuntuWeb(browser);
-    } finally {
-        await browser.close();
-        saveFailureReport();
-        console.log('=== COLLECTION COMPLETE ===');
+    async function launchBrowser() {
+        return chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
     }
+
+    // Run each vendor with its own browser instance for isolation.
+    // If one vendor crashes the browser, others still run.
+    const vendors = [
+        { name: 'Red Hat', fn: scrapeRedHat },
+        { name: 'Oracle', fn: scrapeOracleMailingList },
+        { name: 'Ubuntu', fn: scrapeUbuntuWeb }
+    ];
+
+    for (const { name, fn } of vendors) {
+        let browser;
+        try {
+            browser = await launchBrowser();
+            await fn(browser);
+        } catch (e) {
+            console.error(`[MAIN] ${name} scraper failed: ${e.message}`);
+            recordFailure(name, 'SCRAPER_CRASH', '', e);
+        } finally {
+            try { if (browser) await browser.close(); } catch (_) { }
+        }
+    }
+
+    saveFailureReport();
+    console.log('=== COLLECTION COMPLETE ===');
 })();
