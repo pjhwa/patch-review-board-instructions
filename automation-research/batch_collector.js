@@ -44,6 +44,12 @@ function parseDateRange() {
 
     const quarterIdx = args.indexOf('--quarter');
     const daysIdx = args.indexOf('--days');
+    const retryIdx = args.indexOf('--retry-failures');
+
+    if (retryIdx !== -1) {
+        console.log('[CONFIG] Retry mode activated: Parsing collection_failures.json');
+        return { retryMode: true, startDate: new Date(0), endDate: new Date() };
+    }
 
     if (quarterIdx !== -1 && args[quarterIdx + 1]) {
         const qMatch = args[quarterIdx + 1].match(/^(\d{4})-Q([1-4])$/);
@@ -210,19 +216,7 @@ async function scrapeRedHat(browser) {
 
         console.log(`[REDHAT] Found ${allAdvisories.length} candidates across pages.`);
 
-        await processInBatches(browser, allAdvisories, 'Red Hat', async (ctxPage, adv) => {
-            await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            const details = await ctxPage.evaluate(() => {
-                const main = document.querySelector('#main-content') || document.body;
-                const clones = main.cloneNode(true);
-                clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
-                return {
-                    full_text: clones.innerText.replace(/\s+/g, ' ').slice(0, 6000),
-                    title: document.title
-                };
-            });
-            saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Red Hat' });
-        });
+        await processInBatches(browser, allAdvisories, 'Red Hat', redhatWorker);
 
     } catch (e) {
         console.error('[REDHAT] Critical:', e);
@@ -283,15 +277,7 @@ async function scrapeOracleMailingList(browser) {
 
         console.log(`[ORACLE] Total UEK Candidates: ${allAdvisories.length}`);
 
-        await processInBatches(browser, allAdvisories, 'Oracle', async (ctxPage, adv) => {
-            await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            const details = await ctxPage.evaluate(() => {
-                const pre = document.querySelector('pre');
-                if (pre) return { full_text: pre.innerText };
-                return { full_text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 5000) };
-            });
-            saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Oracle' });
-        });
+        await processInBatches(browser, allAdvisories, 'Oracle', oracleWorker);
 
     } catch (e) {
         console.error('[ORACLE] Error:', e);
@@ -374,36 +360,8 @@ async function scrapeUbuntuWeb(browser) {
         // Fetch full details for each and filter by LTS version
         const ltsAdvisories = [];
         await processInBatches(browser, allAdvisories, 'Ubuntu', async (ctxPage, adv) => {
-            await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            const details = await ctxPage.evaluate(() => {
-                const main = document.querySelector('main') || document.body;
-                const clones = main.cloneNode(true);
-                clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
-                const text = clones.innerText.replace(/\s+/g, ' ');
-
-                // Extract publication date
-                const dateMatch = text.match(/(\d{1,2}\s+\w+\s+\d{4})/);
-
-                return {
-                    full_text: text.slice(0, 6000),
-                    title: document.title,
-                    pubDate: dateMatch ? dateMatch[1] : ''
-                };
-            });
-
-            // Filter by LTS version
-            const hasTargetLTS = UBUNTU_LTS_VERSIONS.some(ver =>
-                details.full_text.includes(ver) || details.full_text.includes(`Ubuntu ${ver}`)
-            );
-
-            // Filter by date
-            const pubDate = parseDate(details.pubDate || adv.dateStr);
-            const inTargetPeriod = isWithinTargetPeriod(pubDate);
-
-            if (hasTargetLTS && inTargetPeriod) {
-                saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Ubuntu', pubDate: pubDate.toISOString() });
-                ltsAdvisories.push(adv.id);
-            }
+            const passed = await ubuntuWorker(ctxPage, adv);
+            if (passed) ltsAdvisories.push(adv.id);
         });
 
         console.log(`[UBUNTU] Saved ${ltsAdvisories.length} LTS advisories matching target period.`);
@@ -477,7 +435,72 @@ async function processInBatches(browser, items, vendorTitle, asyncWorker) {
 
 // --- MAIN ---
 (async () => {
-    console.log(`=== BATCH COLLECTOR v12 (Robust Debug Edition) START ===`);
+    console.log(`=== BATCH COLLECTOR START ===`);
+    const dateConfig = parseDateRange();
+    const retryMode = dateConfig.retryMode === true;
+
+    // Red Hat worker definition
+    const redhatWorker = async (ctxPage, adv) => {
+        await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const details = await ctxPage.evaluate(() => {
+            const main = document.querySelector('#main-content') || document.body;
+            const clones = main.cloneNode(true);
+            clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
+            return {
+                full_text: clones.innerText.replace(/\s+/g, ' ').slice(0, 6000),
+                title: document.title
+            };
+        });
+        saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Red Hat' });
+    };
+
+    // Oracle worker definition
+    const oracleWorker = async (ctxPage, adv) => {
+        await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const details = await ctxPage.evaluate(() => {
+            const pre = document.querySelector('pre');
+            if (pre) return { full_text: pre.innerText };
+            return { full_text: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 5000) };
+        });
+        saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Oracle' });
+    };
+
+    // Ubuntu worker definition
+    const ubuntuWorker = async (ctxPage, adv) => {
+        await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const details = await ctxPage.evaluate(() => {
+            const main = document.querySelector('main') || document.body;
+            const clones = main.cloneNode(true);
+            clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
+            const text = clones.innerText.replace(/\\s+/g, ' ');
+            const dateMatch = text.match(/(\\d{1,2}\\s+\\w+\\s+\\d{4})/);
+            return {
+                full_text: text.slice(0, 6000),
+                title: document.title,
+                pubDate: dateMatch ? dateMatch[1] : ''
+            };
+        });
+
+        const hasTargetLTS = UBUNTU_LTS_VERSIONS.some(ver =>
+            details.full_text.includes(ver) || details.full_text.includes(`Ubuntu ${ver}`)
+        );
+
+        const pubDate = parseDate(details.pubDate || adv.dateStr || new Date().toISOString());
+
+        // In retry mode, we bypass the date strictness if we already identified it as a failure to parse.
+        // Or we just evaluate if it applies and save.
+        if (hasTargetLTS || retryMode) {
+            saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Ubuntu', pubDate: pubDate.toISOString() });
+            return true;
+        }
+        return false;
+    };
+
+    const workerMap = {
+        'Red Hat': redhatWorker,
+        'Oracle': oracleWorker,
+        'Ubuntu': ubuntuWorker
+    };
 
     async function launchBrowser() {
         return chromium.launch({
@@ -486,24 +509,60 @@ async function processInBatches(browser, items, vendorTitle, asyncWorker) {
         });
     }
 
-    // Run each vendor with its own browser instance for isolation.
-    // If one vendor crashes the browser, others still run.
-    const vendors = [
-        { name: 'Red Hat', fn: scrapeRedHat },
-        { name: 'Oracle', fn: scrapeOracleMailingList },
-        { name: 'Ubuntu', fn: scrapeUbuntuWeb }
-    ];
-
-    for (const { name, fn } of vendors) {
-        let browser;
+    if (retryMode) {
+        let failures = [];
         try {
-            browser = await launchBrowser();
-            await fn(browser);
+            const failData = fs.readFileSync(path.join(OUTPUT_DIR, 'collection_failures.json'), 'utf8');
+            failures = JSON.parse(failData);
         } catch (e) {
-            console.error(`[MAIN] ${name} scraper failed: ${e.message}`);
-            recordFailure(name, 'SCRAPER_CRASH', '', e);
-        } finally {
-            try { if (browser) await browser.close(); } catch (_) { }
+            console.error('[CONFIG] No collection_failures.json found or invalid format.');
+            process.exit(1);
+        }
+
+        console.log(`[RETRY ONLY] Loaded ${failures.length} failed items from collection_failures.json`);
+
+        // Group by vendor
+        const byVendor = {};
+        for (const f of failures) {
+            if (!byVendor[f.vendor]) byVendor[f.vendor] = [];
+            byVendor[f.vendor].push({ id: f.id, url: f.url });
+        }
+
+        for (const [vendor, items] of Object.entries(byVendor)) {
+            const worker = workerMap[vendor];
+            if (!worker) continue;
+
+            let browser;
+            try {
+                browser = await launchBrowser();
+                console.log(`\n[RETRY ONLY] Processing ${items.length} items for ${vendor}`);
+                await processInBatches(browser, items, vendor, worker);
+            } catch (e) {
+                console.error(`[RETRY ONLY] Browser failure for ${vendor}: ${e.message}`);
+            } finally {
+                try { if (browser) await browser.close(); } catch (_) { }
+            }
+        }
+    } else {
+        // Run each vendor with its own browser instance for isolation.
+        // If one vendor crashes the browser, others still run.
+        const vendors = [
+            { name: 'Red Hat', fn: scrapeRedHat },
+            { name: 'Oracle', fn: scrapeOracleMailingList },
+            { name: 'Ubuntu', fn: scrapeUbuntuWeb }
+        ];
+
+        for (const { name, fn } of vendors) {
+            let browser;
+            try {
+                browser = await launchBrowser();
+                await fn(browser);
+            } catch (e) {
+                console.error(`[MAIN] ${name} scraper failed: ${e.message}`);
+                recordFailure(name, 'SCRAPER_CRASH', '', e);
+            } finally {
+                try { if (browser) await browser.close(); } catch (_) { }
+            }
         }
     }
 
