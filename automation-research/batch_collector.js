@@ -27,8 +27,11 @@ const UBUNTU_LTS_VERSIONS = ['22.04', '24.04'];
 const MAX_CONCURRENCY = 3;
 const MAX_REDHAT_PAGES = 10;
 const MAX_UBUNTU_PAGES = 30;
-const MAX_RETRIES = 1;
-const RETRY_DELAY_MS = 3000;
+
+// --- GLOBAL RETRY CONFIG ---
+const MAX_GLOBAL_RETRIES = 2;
+const GLOBAL_RETRY_DELAY_MS = 60000; // 60 seconds between retry passes
+const RETRY_QUEUE = [];
 
 // --- DATE RANGE: CLI PARSING ---
 // Usage:
@@ -207,22 +210,18 @@ async function scrapeRedHat(browser) {
 
         console.log(`[REDHAT] Found ${allAdvisories.length} candidates across pages.`);
 
-        await processInBatches(browser, allAdvisories, async (ctxPage, adv) => {
-            try {
-                await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                const details = await ctxPage.evaluate(() => {
-                    const main = document.querySelector('#main-content') || document.body;
-                    const clones = main.cloneNode(true);
-                    clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
-                    return {
-                        full_text: clones.innerText.replace(/\s+/g, ' ').slice(0, 6000),
-                        title: document.title
-                    };
-                });
-                saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Red Hat' });
-            } catch (e) {
-                recordFailure('Red Hat', adv.id, adv.url, e);
-            }
+        await processInBatches(browser, allAdvisories, 'Red Hat', async (ctxPage, adv) => {
+            await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            const details = await ctxPage.evaluate(() => {
+                const main = document.querySelector('#main-content') || document.body;
+                const clones = main.cloneNode(true);
+                clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
+                return {
+                    full_text: clones.innerText.replace(/\s+/g, ' ').slice(0, 6000),
+                    title: document.title
+                };
+            });
+            saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Red Hat' });
         });
 
     } catch (e) {
@@ -284,18 +283,14 @@ async function scrapeOracleMailingList(browser) {
 
         console.log(`[ORACLE] Total UEK Candidates: ${allAdvisories.length}`);
 
-        await processInBatches(browser, allAdvisories, async (ctxPage, adv) => {
-            try {
-                await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                const details = await ctxPage.evaluate(() => {
-                    const pre = document.querySelector('pre');
-                    if (pre) return { full_text: pre.innerText };
-                    return { full_text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 5000) };
-                });
-                saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Oracle' });
-            } catch (e) {
-                recordFailure('Oracle', adv.id, adv.url, e);
-            }
+        await processInBatches(browser, allAdvisories, 'Oracle', async (ctxPage, adv) => {
+            await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            const details = await ctxPage.evaluate(() => {
+                const pre = document.querySelector('pre');
+                if (pre) return { full_text: pre.innerText };
+                return { full_text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 5000) };
+            });
+            saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Oracle' });
         });
 
     } catch (e) {
@@ -378,41 +373,36 @@ async function scrapeUbuntuWeb(browser) {
 
         // Fetch full details for each and filter by LTS version
         const ltsAdvisories = [];
-        await processInBatches(browser, allAdvisories, async (ctxPage, adv) => {
-            try {
-                await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                const details = await ctxPage.evaluate(() => {
-                    const main = document.querySelector('main') || document.body;
-                    const clones = main.cloneNode(true);
-                    clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
-                    const text = clones.innerText.replace(/\s+/g, ' ');
+        await processInBatches(browser, allAdvisories, 'Ubuntu', async (ctxPage, adv) => {
+            await ctxPage.goto(adv.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            const details = await ctxPage.evaluate(() => {
+                const main = document.querySelector('main') || document.body;
+                const clones = main.cloneNode(true);
+                clones.querySelectorAll('nav, footer, script, style, .hide').forEach(n => n.remove());
+                const text = clones.innerText.replace(/\s+/g, ' ');
 
-                    // Extract publication date
-                    const dateMatch = text.match(/(\d{1,2}\s+\w+\s+\d{4})/);
+                // Extract publication date
+                const dateMatch = text.match(/(\d{1,2}\s+\w+\s+\d{4})/);
 
-                    return {
-                        full_text: text.slice(0, 6000),
-                        title: document.title,
-                        pubDate: dateMatch ? dateMatch[1] : ''
-                    };
-                });
+                return {
+                    full_text: text.slice(0, 6000),
+                    title: document.title,
+                    pubDate: dateMatch ? dateMatch[1] : ''
+                };
+            });
 
-                // Filter by LTS version
-                const hasTargetLTS = UBUNTU_LTS_VERSIONS.some(ver =>
-                    details.full_text.includes(ver) || details.full_text.includes(`Ubuntu ${ver}`)
-                );
+            // Filter by LTS version
+            const hasTargetLTS = UBUNTU_LTS_VERSIONS.some(ver =>
+                details.full_text.includes(ver) || details.full_text.includes(`Ubuntu ${ver}`)
+            );
 
-                // Filter by date
-                const pubDate = parseDate(details.pubDate || adv.dateStr);
-                const inTargetPeriod = isWithinTargetPeriod(pubDate);
+            // Filter by date
+            const pubDate = parseDate(details.pubDate || adv.dateStr);
+            const inTargetPeriod = isWithinTargetPeriod(pubDate);
 
-                if (hasTargetLTS && inTargetPeriod) {
-                    saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Ubuntu', pubDate: pubDate.toISOString() });
-                    ltsAdvisories.push(adv.id);
-                }
-
-            } catch (e) {
-                recordFailure('Ubuntu', adv.id, adv.url, e);
+            if (hasTargetLTS && inTargetPeriod) {
+                saveAdvisory(adv.id, { ...adv, ...details, vendor: 'Ubuntu', pubDate: pubDate.toISOString() });
+                ltsAdvisories.push(adv.id);
             }
         });
 
@@ -426,70 +416,56 @@ async function scrapeUbuntuWeb(browser) {
 }
 
 // --- HELPER ---
-async function processInBatches(browser, items, asyncWorker) {
+async function processInBatches(browser, items, vendorTitle, asyncWorker) {
     const chunks = [];
     for (let i = 0; i < items.length; i += MAX_CONCURRENCY) {
         chunks.push(items.slice(i, i + MAX_CONCURRENCY));
     }
-    console.log(`[BATCH] Processing ${items.length} items...`);
+    console.log(`[BATCH] Processing ${items.length} ${vendorTitle} items...`);
     let count = 0;
     let browserDead = false;
     for (const chunk of chunks) {
         if (browserDead) {
-            // Record remaining items as failures
             for (const item of chunk) {
-                recordFailure('BATCH', item.id, item.url, new Error('Browser closed — skipped remaining items'));
+                RETRY_QUEUE.push({ vendor: vendorTitle, item, worker: asyncWorker, error: new Error('Browser closed — skipped remaining items') });
             }
             count += chunk.length;
             continue;
         }
         await Promise.all(chunk.map(async (item) => {
-            let lastError = null;
-            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-                let context, page;
-                try {
-                    context = await browser.newContext();
-                    page = await context.newPage();
-                } catch (e) {
-                    // Browser is dead — cannot create new context/page
+            let context, page;
+            try {
+                context = await browser.newContext();
+                page = await context.newPage();
+            } catch (e) {
+                browserDead = true;
+                RETRY_QUEUE.push({ vendor: vendorTitle, item, worker: asyncWorker, error: new Error(`Browser closed — cannot create page: ${e.message}`) });
+                return;
+            }
+            try {
+                await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
+
+                logDebug(`[PROCESS] Starting ${item.id} (${item.url})`);
+
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('WATCHDOG_TIMEOUT: 60000ms exceeded')), 60000)
+                );
+
+                await Promise.race([
+                    asyncWorker(page, item),
+                    timeoutPromise
+                ]);
+
+                logDebug(`[PROCESS] Success ${item.id}`);
+            } catch (e) {
+                if (e.message && e.message.includes('has been closed')) {
                     browserDead = true;
-                    recordFailure('BATCH', item.id, item.url, new Error(`Browser closed — cannot create page: ${e.message}`));
-                    return;
                 }
-                try {
-                    await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
-
-                    logDebug(`[PROCESS] Starting ${item.id} (${item.url}) - Attempt ${attempt + 1}`);
-
-                    // Watchdog Timer (60s)
-                    const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('WATCHDOG_TIMEOUT: 60000ms exceeded')), 60000)
-                    );
-
-                    await Promise.race([
-                        asyncWorker(page, item),
-                        timeoutPromise
-                    ]);
-
-                    logDebug(`[PROCESS] Success ${item.id}`);
-                    lastError = null;
-                    break; // Success
-                } catch (e) {
-                    lastError = e;
-                    if (e.message && e.message.includes('has been closed')) {
-                        browserDead = true;
-                        recordFailure('BATCH', item.id, item.url, e);
-                        return; // Don't retry — browser is dead
-                    }
-                    if (attempt < MAX_RETRIES) {
-                        console.warn(`\n[RETRY] ${item.id || 'unknown'}: attempt ${attempt + 1} failed (${e.message}). Retrying in ${RETRY_DELAY_MS / 1000}s...`);
-                        await sleep(RETRY_DELAY_MS);
-                    }
-                } finally {
-                    // Safe cleanup — browser may already be dead
-                    try { if (page) await page.close(); } catch (_) { }
-                    try { if (context) await context.close(); } catch (_) { }
-                }
+                RETRY_QUEUE.push({ vendor: vendorTitle, item, worker: asyncWorker, error: e });
+                logDebug(`[PROCESS FAIL] ${item.id}: ${e.message}`);
+            } finally {
+                try { if (page) await page.close(); } catch (_) { }
+                try { if (context) await context.close(); } catch (_) { }
             }
         }));
         count += chunk.length;
@@ -529,6 +505,91 @@ async function processInBatches(browser, items, asyncWorker) {
         } finally {
             try { if (browser) await browser.close(); } catch (_) { }
         }
+    }
+
+    // --- GLOBAL RETRY LOGIC ---
+    for (let pass = 1; pass <= MAX_GLOBAL_RETRIES; pass++) {
+        if (RETRY_QUEUE.length === 0) break;
+
+        console.log(`\n=== GLOBAL RETRY PASS ${pass}/${MAX_GLOBAL_RETRIES} ===`);
+        console.log(`Waiting ${GLOBAL_RETRY_DELAY_MS / 1000} seconds before retrying ${RETRY_QUEUE.length} failed items...`);
+        await sleep(GLOBAL_RETRY_DELAY_MS);
+
+        const currentQueue = RETRY_QUEUE.splice(0, RETRY_QUEUE.length);
+        const chunks = [];
+        for (let i = 0; i < currentQueue.length; i += MAX_CONCURRENCY) {
+            chunks.push(currentQueue.slice(i, i + MAX_CONCURRENCY));
+        }
+
+        let browser;
+        try {
+            browser = await launchBrowser();
+            let browserDead = false;
+            let count = 0;
+
+            for (const chunk of chunks) {
+                if (browserDead) {
+                    for (const retryObj of chunk) {
+                        retryObj.error = new Error('Browser closed earlier in retry pass');
+                        RETRY_QUEUE.push(retryObj);
+                    }
+                    count += chunk.length;
+                    continue;
+                }
+
+                await Promise.all(chunk.map(async (retryObj) => {
+                    let context, page;
+                    try {
+                        context = await browser.newContext();
+                        page = await context.newPage();
+                    } catch (e) {
+                        browserDead = true;
+                        retryObj.error = new Error(`Browser context failed: ${e.message}`);
+                        RETRY_QUEUE.push(retryObj);
+                        return;
+                    }
+
+                    try {
+                        await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
+                        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('WATCHDOG_TIMEOUT')), 60000));
+
+                        await Promise.race([
+                            retryObj.worker(page, retryObj.item),
+                            timeoutPromise
+                        ]);
+
+                        logDebug(`[RETRY SUCCESS] Pass ${pass} - ${retryObj.vendor} ${retryObj.item.id}`);
+                    } catch (e) {
+                        if (e.message && e.message.includes('has been closed')) {
+                            browserDead = true;
+                        }
+                        retryObj.error = e;
+                        RETRY_QUEUE.push(retryObj);
+                        logDebug(`[RETRY FAIL] Pass ${pass} - ${retryObj.vendor} ${retryObj.item.id}: ${e.message}`);
+                    } finally {
+                        try { if (page) await page.close(); } catch (_) { }
+                        try { if (context) await context.close(); } catch (_) { }
+                    }
+                }));
+                count += chunk.length;
+                process.stdout.write(`\r[RETRY PROGRESS] ${count}/${currentQueue.length}`);
+            }
+        } catch (e) {
+            console.error(`\n[RETRY] Pass ${pass} Browser launch failed: ${e.message}`);
+            // Push everything back and abort this pass
+            RETRY_QUEUE.push(...currentQueue);
+        } finally {
+            try { if (browser) await browser.close(); } catch (_) { }
+        }
+        console.log('');
+    }
+
+    console.log('\n[BATCH SUMMARY] Global Retries finished.');
+
+    // Register absolute failures
+    const finalFails = Array.from(new Set(RETRY_QUEUE));
+    for (const fail of finalFails) {
+        recordFailure(fail.vendor, fail.item.id, fail.item.url, fail.error);
     }
 
     saveFailureReport();
