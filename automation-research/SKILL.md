@@ -127,18 +127,19 @@ Issue ID,Vendor,Dist Version,Component,Version,Date,Criticality,Patch Descriptio
     - If `USN` or `RHSA` refers to multiple packages, ensure you pick the metapackage matching the `Component` and `Dist Version`.
 - **한글 설명 (Korean Description)**:
     - **Do NOT** use generic phrases like "Security update for kernel" or simply list CVE IDs.
-    - **MUST** detailed specific critical bugs. Explain **what** functionality is broken and **how** it affects the system.
+    - **Do NOT** include boilerplate text, URL links, update instructions, or release note references (e.g., "See the following advisory for the RPM packages", "Space precludes documenting...").
+    - **MUST** be a highly condensed, synthesized summary (1-2 sentences maximum). Explain exactly **what** functionality is broken and **how** it affects the system.
     - **Keywords to look for**: "System Hang", "Memory Leak", "Race Condition", "Use-After-Free", "Data Corruption", "Panic".
-    - *Example (Bad):* "커널 보안 업데이트 및 버그 수정."
+    - *Example (Bad):* "커널 보안 업데이트. 다음 문제를 해결함: See the following advisory for the RPM packages for this release... Space precludes documenting..."
     - *Example (Good):* "메모리 부족 상황에서 데이터 손실을 유발할 수 있는 zswap 경쟁 상태 해결 및 `nilfs_mdt_destroy`의 일반 보호 오류(GPF)로 인한 시스템 크래시 방지."
 
 - **Patch Description (English)**:
-    - **Do NOT** simply copy/paste the `diff_summary` or log.
-    - **MUST** be a **synthesized summary** of the **Korean Description**.
+    - **Do NOT** simply copy/paste the `diff_summary` or log, and **NEVER** include raw advisory paragraphs.
+    - **MUST** be a **synthesized summary** of the **Korean Description** (1-2 sentences maximum).
     - It should convey the exact same critical impact and specific fix details as the Korean text, but in English.
     - *Example:* "Resolves Race Condition in zswap causing potential data loss under memory pressure. Fixes General Protection Fault (GPF) in `nilfs_mdt_destroy` preventing system crashes."
 
-**Note:** Ensure the description reflects that it is a cumulative update if applicable.
+**Note:** Ensure the description reflects that it is a cumulative update if applicable (e.g., appending "(누적 패치 포함: 3건)").
 
 ## 3. Execution Example
 
