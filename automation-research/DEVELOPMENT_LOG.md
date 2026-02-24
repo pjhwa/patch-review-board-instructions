@@ -225,5 +225,6 @@ for (let i = 0; i < MAX_UBUNTU_PAGES && shouldContinue; i++) {
         - RHEL 7 Extended Lifecycle Support(ELS) 패치가 잘못 포함되던 버그 수정 및 명시적 제외 (`Extended Lifecycle`, `rhel 7`).
         - 컴포넌트 추출 시 본문의 무관한 텍스트로 인한 오분류를 방지하기 위해 `title` 및 `summary` 우선 검색 로직 적용 (예: `resource-agents`를 `pacemaker`로 오인하는 문제 해결).
         - Ubuntu Variant 전용 커널 패치(AWS, GCP, NVIDIA, FIPS 등) 명시적 제외. 단 일반 커널(`linux - Linux kernel`)에도 적용되는 혼합 패치는 포함 유지.
-    - `perform_actual_review.py` 고도화: 생성되는 CSV 컬럼을 베스트 프랙티스 규격과 100% 일치하도록 조정 (`Issue ID, Vendor, Dist Version, Component, Version, Date, Criticality, Patch Description, 한글 설명, Reference`).
+    - `patch_preprocessing.py` 고도화: 생성되는 CSV 컬럼을 베스트 프랙티스 규격과 100% 일치하도록 조정 (`Issue ID, Vendor, Dist Version, Component, Version, Date, Criticality, Patch Description, 한글 설명, Reference`).
     - 베스트 프랙티스 적용: LLM 설명문을 단순 키워드 조합에서 구체적인 CVE, 함수명, 시스템 영향을 포함하는 전문가 수준(Best Practice) 포맷으로 전면 전환 적용.
+    - `batch_collector.js` 수집 안정성 개선: 전역 재시도 큐(Global Retry Queue) 시스템 도입 (최대 2회, 60초 지연된 재시도 병렬 수행), 벤더 스크래핑별 완전한 브라우저 분리 환경 적용, 실패 항목에 대한 정밀한 JSON 로깅(`collection_failures.json`) 기능 추가로 오류 강건성 향상.
