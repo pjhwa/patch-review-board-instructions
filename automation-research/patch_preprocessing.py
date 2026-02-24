@@ -2,9 +2,7 @@ import re
 import csv
 import os
 import json
-import argparse
-import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 import glob
 
 # NOTE: This script replaces 'perform_llm_review_simulation.py'. 
@@ -115,44 +113,6 @@ def extract_redhat_date(text):
     
     return ""
 
-def extract_redhat_dist_version(full_text):
-    """Extracts RHEL major version numbers from Red Hat advisory text.
-    
-    Strategy:
-    1. Parse 'Affected Products' section for lines like:
-       'Red Hat Enterprise Linux for x86_64 - Update Services for SAP Solutions 9.2 x86_64'
-       -> extracts '9'
-    2. Fallback: scan full_text for 'Red Hat Enterprise Linux X' patterns.
-    
-    Returns a sorted list of unique major version strings e.g. ['8', '9'].
-    Returns ['Unknown'] if nothing is found.
-    """
-    versions = set()
-
-    # Strategy 1: Parse 'Affected Products' section
-    # Look for section header and extract lines until next section
-    affected_match = re.search(
-        r"Affected Products[:\s]*(.+?)(?=\n(?:[A-Z][A-Za-z ]+:|Fixes|References|Packages|$))",
-        full_text, re.DOTALL | re.IGNORECASE
-    )
-    if affected_match:
-        affected_block = affected_match.group(1)
-        # Match 'Red Hat Enterprise Linux ... X.Y ...' or 'Red Hat Enterprise Linux X'
-        for m in re.finditer(
-            r"Red Hat Enterprise Linux[^\n]*?\b(\d+)(?:\.\d+)?\b",
-            affected_block, re.IGNORECASE
-        ):
-            versions.add(m.group(1))
-
-    # Strategy 2: Fallback — scan full text
-    if not versions:
-        for m in re.finditer(r"Red Hat Enterprise Linux (\d+)", full_text, re.IGNORECASE):
-            versions.add(m.group(1))
-
-    if versions:
-        return sorted(versions)
-    return ["Unknown"]
-
 def extract_redhat_content(text):
     """Clean Red Hat boilerplate and extract Description/Topic/Fixes"""
     # 1. Remove Top Boilerplate (Cookie Warning & Nav)
@@ -231,28 +191,39 @@ def extract_diff_content(text, vendor):
 
 def get_component_name(vendor, title, summary, full_text):
     text = (title + " " + summary + " " + full_text).lower()
+    text_primary = (title + " " + summary).lower()
     
     # 1. Oracle Special Case: UEK + Versioning
     if vendor == "Oracle":
-        if "uek" in text or "unbreakable enterprise kernel" in text:
+        if "uek" in text_primary or "unbreakable enterprise kernel" in text_primary:
             comp = "kernel-uek"
             
             # Extract Major.Minor version for stream splitting (e.g. 5.15, 6.12)
-            version_match = re.search(r'(\d+\.\d+)\.\d+', text)
+            version_match = re.search(r'(\d+\.\d+)\.\d+', text_primary)
+            if not version_match:
+                version_match = re.search(r'(\d+\.\d+)\.\d+', text)
             kern_series = f"-v{version_match.group(1)}" if version_match else ""
             
-            ol_ver = extract_oracle_version(text)
+            ol_ver = extract_oracle_version(text_primary)
+            if not ol_ver: ol_ver = extract_oracle_version(text)
             ver_suffix = f"-{ol_ver}" if ol_ver else ""
             
             return f"{comp}{kern_series}{ver_suffix}"
         return "other"
     
     # 2. Ubuntu/RHEL Heuristics
+    # Search primary text first to avoid false positives from body
+    for core in SYSTEM_CORE_COMPONENTS:
+        if re.search(fr'\b{re.escape(core)}\b', text_primary):
+            return core
+            
     for core in SYSTEM_CORE_COMPONENTS:
         if re.search(fr'\b{re.escape(core)}\b', text):
             return core
             
-    m = re.search(r'([a-z0-9]+(-[a-z0-9]+)*)-\d+\.\d+', text)
+    m = re.search(r'([a-z0-9]+(-[a-z0-9]+)*)-\d+\.\d+', text_primary)
+    if not m:
+        m = re.search(r'([a-z0-9]+(-[a-z0-9]+)*)-\d+\.\d+', text)
     if m: 
         name = m.group(1)
         for core in SYSTEM_CORE_COMPONENTS:
@@ -302,61 +273,13 @@ def is_system_critical(vendor, component, text):
     if "kernel" in comp and "texlive" not in comp: return True
     return False
 
-def compute_date_range(args):
-    """Compute (start_date, end_date) from CLI arguments.
-    Returns (datetime, datetime) tuple.
-    """
-    if args.quarter:
-        import re as _re
-        m = _re.match(r'^(\d{4})-Q([1-4])$', args.quarter)
-        if not m:
-            print(f"Error: Invalid quarter format '{args.quarter}'. Use YYYY-QN (e.g., 2026-Q1)")
-            raise SystemExit(1)
-        year = int(m.group(1))
-        q = int(m.group(2))
-        q_start_month = (q - 1) * 3 + 1  # Q1→1, Q2→4, Q3→7, Q4→10
-        end_date = datetime(year, q_start_month + 3, 1) if q_start_month + 3 <= 12 else datetime(year + 1, 1, 1)
-        # 1-month buffer before quarter start
-        start_month = q_start_month - 1
-        start_year = year
-        if start_month < 1:
-            start_month = 12
-            start_year -= 1
-        start_date = datetime(start_year, start_month, 1)
-        print(f"[CONFIG] Quarter mode: {args.quarter}")
-    else:
-        lookback = args.days
-        end_date = datetime.now() + timedelta(days=1)
-        start_date = datetime.now() - timedelta(days=lookback)
-        start_date = start_date.replace(day=1)  # Snap to first of month
-        print(f"[CONFIG] Lookback mode: {lookback} days")
-    
-    print(f"[CONFIG] Date range: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')} (exclusive)")
-    return start_date, end_date
-
-def is_within_date_range(date_str, start_date, end_date):
-    """Check if a parsed date string falls within [start_date, end_date)."""
-    if not date_str or date_str == "Unknown":
-        return True  # Include unknowns — let the agent decide
-    try:
-        if len(date_str) == 7:  # YYYY-MM format
-            dt = datetime.strptime(date_str, "%Y-%m")
-        else:
-            dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
-        return start_date <= dt < end_date
-    except ValueError:
-        return True  # Can't parse — include by default
-
-def preprocess_patches(start_date=None, end_date=None):
+def preprocess_patches():
     print(f"Loading data from {JSON_DIR}...")
     
     raw_list = []
-    skipped_by_date = 0
     
     # --- Step 1: Ingest JSONs directly ---
     json_files = glob.glob(os.path.join(JSON_DIR, "*.json"))
-    # Exclude the failure report file
-    json_files = [f for f in json_files if 'collection_failures' not in os.path.basename(f)]
     print(f"Found {len(json_files)} JSON files.")
 
     for json_path in json_files:
@@ -384,34 +307,27 @@ def preprocess_patches(start_date=None, end_date=None):
                     summary = title # Fallback
                 
             # --- EXCLUSION FILTERS ---
-            # 0. Date Range Filter
-            if start_date and end_date:
-                if not is_within_date_range(date_str, start_date, end_date):
-                    skipped_by_date += 1
-                    continue
-            
             # 1. Garbage Data (Empty Content or Known Bad ID)
-            if (len(full_text) < 50 and vendor == "Red Hat") or patch_id == "RHSA-2026:2664":
-                continue
-            
-            # Exclude OpenShift product advisories (not RHEL core packages).
-            # Check title/synopsis AND full_text to catch cases where OCP advisories
-            # do not mention 'OpenShift' in title but affect only OCP products.
+            # Also exclude OpenShift product advisories (not RHEL core)
             if "openshift" in title.lower() or "openshift" in summary.lower():
                 continue
-            # Additional check: if 'Affected Products' only lists OCP (no RHEL line)
-            if vendor == "Red Hat":
-                affected_match = re.search(
-                    r"Affected Products[:\s]*(.+?)(?=\n[A-Z]|$)", full_text, re.DOTALL | re.IGNORECASE
-                )
-                if affected_match:
-                    ap_block = affected_match.group(1)
-                    has_rhel = bool(re.search(r"Red Hat Enterprise Linux", ap_block, re.IGNORECASE))
-                    has_ocp_only = bool(re.search(r"OpenShift Container Platform", ap_block, re.IGNORECASE))
-                    if has_ocp_only and not has_rhel:
-                        continue  # OCP-only advisory — skip
-
-            # 2. User Blacklist (SAP, kernel-rt)
+            if "extended lifecycle" in title.lower() or "extended lifecycle" in summary.lower() or "extended lifecycle" in full_text.lower()[:500]:
+                continue
+            if "rhel 7" in title.lower() and vendor == "Red Hat":
+                continue
+            if (len(full_text) < 50 and vendor == "Red Hat") or patch_id == "RHSA-2026:2664":
+                continue
+                
+            # 2. Ubuntu Variant Exclusions
+            if vendor == "Ubuntu" and "kernel" in title.lower():
+                # Ubuntu patches applying to the base x86_64 kernel will always list
+                # the "linux - Linux kernel" package in the security advisory text.
+                # If a patch applies exclusively to variants (AWS, GCP, NVIDIA, FIPS, etc.),
+                # this base package string will be absent.
+                if "linux - linux kernel" not in full_text.lower():
+                    continue
+                
+            # 3. User Blacklist (SAP, kernel-rt)
             if "SAP" in title or "Update Services for SAP" in summary:
                 continue
             if "real time" in title.lower() or "kernel-rt" in title.lower() or "kernel-rt" in summary.lower():
@@ -441,8 +357,10 @@ def preprocess_patches(start_date=None, end_date=None):
                     dist_versions = [ol_ver.replace("ol", "")] # "9"
             
             elif vendor == "Red Hat":
-                # Use dedicated parser that checks 'Affected Products' section first
-                dist_versions = extract_redhat_dist_version(full_text)
+                # Look for "Red Hat Enterprise Linux X"
+                rhel_matches = re.findall(r"Red Hat Enterprise Linux (\d+)", full_text)
+                if rhel_matches:
+                    dist_versions = sorted(list(set(rhel_matches)))
             
             if not dist_versions:
                 dist_versions = ["Unknown"]
@@ -488,14 +406,9 @@ def preprocess_patches(start_date=None, end_date=None):
                 })
 
         except Exception as e:
-            err_msg = f"Error reading {json_path}: {e}\n{traceback.format_exc()}"
-            print(f"Error reading {os.path.basename(json_path)} (see debug log)")
-            with open('debug_preprocessing.log', 'a', encoding='utf-8') as log_f:
-                log_f.write(err_msg + "\n")
+            print(f"Error reading {json_path}: {e}")
 
-    if skipped_by_date > 0:
-        print(f"Skipped by date range: {skipped_by_date}")
-    print(f"Raw Patches (in range): {len(raw_list)}")
+    print(f"Raw Patches: {len(raw_list)}")
 
     # --- Step 2: Pruning ---
     pruned_list = []
@@ -549,10 +462,4 @@ def preprocess_patches(start_date=None, end_date=None):
     print(f"Saved review packet to {OUTPUT_FILE}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Preprocess OS patch advisories for LLM review.')
-    parser.add_argument('--quarter', type=str, help='Target quarter (e.g., 2026-Q1)')
-    parser.add_argument('--days', type=int, default=90, help='Lookback days from today (default: 90)')
-    args = parser.parse_args()
-    
-    start_date, end_date = compute_date_range(args)
-    preprocess_patches(start_date=start_date, end_date=end_date)
+    preprocess_patches()
