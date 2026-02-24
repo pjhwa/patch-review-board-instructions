@@ -2,6 +2,25 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+// --- ROBUST DEBUGGING (Anti-Hang) ---
+process.on('uncaughtException', (err) => {
+    console.error(`\n[FATAL] Uncaught Exception: ${err.message}\n${err.stack}`);
+    fs.appendFileSync('debug_collector.log', `[FATAL] Uncaught Exception: ${err.message}\n`);
+    saveFailureReport();
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error(`\n[FATAL] Unhandled Rejection at:`, promise, 'reason:', reason);
+    fs.appendFileSync('debug_collector.log', `[FATAL] Unhandled Rejection: ${reason}\n`);
+});
+
+function logDebug(msg) {
+    const ts = new Date().toISOString();
+    fs.appendFileSync('debug_collector.log', `[${ts}] ${msg}\n`);
+}
+logDebug('--- NEW BATCH COLLECTION RUN ---');
+
 // --- CONFIGURATION ---
 const OUTPUT_DIR = path.join(__dirname, 'batch_data');
 const UBUNTU_LTS_VERSIONS = ['22.04', '24.04'];
@@ -439,7 +458,20 @@ async function processInBatches(browser, items, asyncWorker) {
                 }
                 try {
                     await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}', route => route.abort());
-                    await asyncWorker(page, item);
+
+                    logDebug(`[PROCESS] Starting ${item.id} (${item.url}) - Attempt ${attempt + 1}`);
+
+                    // Watchdog Timer (60s)
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('WATCHDOG_TIMEOUT: 60000ms exceeded')), 60000)
+                    );
+
+                    await Promise.race([
+                        asyncWorker(page, item),
+                        timeoutPromise
+                    ]);
+
+                    logDebug(`[PROCESS] Success ${item.id}`);
                     lastError = null;
                     break; // Success
                 } catch (e) {
@@ -469,7 +501,7 @@ async function processInBatches(browser, items, asyncWorker) {
 
 // --- MAIN ---
 (async () => {
-    console.log(`=== BATCH COLLECTOR v11 (Crash-Resilient Edition) START ===`);
+    console.log(`=== BATCH COLLECTOR v12 (Robust Debug Edition) START ===`);
 
     async function launchBrowser() {
         return chromium.launch({

@@ -3,6 +3,7 @@ import csv
 import os
 import json
 import argparse
+import traceback
 from datetime import datetime, timedelta
 import glob
 
@@ -487,7 +488,10 @@ def preprocess_patches(start_date=None, end_date=None):
                 })
 
         except Exception as e:
-            print(f"Error reading {json_path}: {e}")
+            err_msg = f"Error reading {json_path}: {e}\n{traceback.format_exc()}"
+            print(f"Error reading {os.path.basename(json_path)} (see debug log)")
+            with open('debug_preprocessing.log', 'a', encoding='utf-8') as log_f:
+                log_f.write(err_msg + "\n")
 
     if skipped_by_date > 0:
         print(f"Skipped by date range: {skipped_by_date}")
